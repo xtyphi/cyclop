@@ -18,7 +18,10 @@ struct NotchContentView: View {
                 topRadius: topRadius,
                 bottomRadius: isOpen ? Theme.openBottomRadius : Theme.collapsedBottomRadius
             )
-            .fill(Color.black)
+            // A synthetic notch has content underneath it — a full-screen app on
+            // an external display — so at rest it is drawn transparent and only
+            // turns black once the panel opens.
+            .fill(Color.black.opacity(isOpen || panel.geometry.isPhysical ? 1 : 0))
             .frame(width: size.width + 2 * topRadius, height: size.height)
             .shadow(color: .black.opacity(isOpen ? 0.5 : 0), radius: 18, y: 8)
 
