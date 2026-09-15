@@ -83,15 +83,19 @@ final class SystemVolume: ObservableObject {
     private func setMuted(_ muted: Bool) {
         guard isAvailable, AudioObjectHasProperty(device, &Self.muteAddress) else { return }
         var value: UInt32 = muted ? 1 : 0
-        AudioObjectSetPropertyData(
+        let status = AudioObjectSetPropertyData(
             device, &Self.muteAddress, 0, nil, UInt32(MemoryLayout<UInt32>.size), &value
         )
-        isMuted = muted
+        // A read-only mute refuses the write; the speaker must not claim silence.
+        if status == noErr { isMuted = muted }
     }
 
     // MARK: - Device
 
     private func bindDefaultDevice() {
+        // A device change queued just before `stop()` still arrives after it,
+        // and must not put listeners back that nothing will ever remove.
+        guard listening else { return }
         var id = AudioObjectID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioObjectID>.size)
         let status = AudioObjectGetPropertyData(

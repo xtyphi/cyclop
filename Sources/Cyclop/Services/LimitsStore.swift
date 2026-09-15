@@ -150,7 +150,12 @@ final class LimitsStore: ObservableObject {
 
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
-            guard !chunk.isEmpty else { return }
+            // At end of file the handler keeps firing with empty data until it
+            // is removed — hundreds of thousands of times a second.
+            guard !chunk.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
             Task { @MainActor in self?.consumeCodex(chunk) }
         }
         task.terminationHandler = { [weak self] _ in
@@ -177,7 +182,14 @@ final class LimitsStore: ObservableObject {
             #"{"jsonrpc":"2.0","method":"initialized"}"#,
             #"{"jsonrpc":"2.0","id":2,"method":"account/rateLimits/read"}"#,
         ]
-        input.fileHandleForWriting.write(Data((requests.joined(separator: "\n") + "\n").utf8))
+        // The throwing variant: a server that quit during start-up would make
+        // the old `write(_:)` raise an exception and take the app down with it.
+        do {
+            try input.fileHandleForWriting.write(contentsOf: Data((requests.joined(separator: "\n") + "\n").utf8))
+        } catch {
+            finishCodex(localized("Codex did not answer"))
+            return
+        }
 
         Task { [weak self, codexTimeout] in
             try? await Task.sleep(for: codexTimeout)
