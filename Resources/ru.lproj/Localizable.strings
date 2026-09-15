@@ -136,3 +136,7 @@
 "Codex did not answer" = "Codex не ответил";
 "Volume" = "Громкость";
 "This output has no volume control" = "У этого выхода нет регулировки громкости";
+"Unexpected answer from Claude" = "Непонятный ответ Claude";
+"Open Claude Code to renew sign-in" = "Откройте Claude Code, чтобы обновить вход";
+"Claude asked to wait, retrying later" = "Claude просит подождать, повторю позже";
+"Claude did not answer" = "Claude не ответил";

@@ -137,3 +137,7 @@
 "Codex did not answer" = "Codex did not answer";
 "Volume" = "Volume";
 "This output has no volume control" = "This output has no volume control";
+"Unexpected answer from Claude" = "Unexpected answer from Claude";
+"Open Claude Code to renew sign-in" = "Open Claude Code to renew sign-in";
+"Claude asked to wait, retrying later" = "Claude asked to wait, retrying later";
+"Claude did not answer" = "Claude did not answer";

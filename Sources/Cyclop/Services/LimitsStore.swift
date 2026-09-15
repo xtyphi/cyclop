@@ -2,15 +2,15 @@ import Foundation
 
 /// What is left of the Claude and Codex subscription limits.
 ///
-/// Both come through the vendors' own clients, never through a login token
-/// lifted out of them: Anthropic's terms keep subscription credentials to
-/// Claude Code and claude.ai, and a usage tracker reading them is the grey
-/// zone this tab stays out of.
-///
-/// - Claude: Claude Code hands its status line the current `rate_limits` on
-///   every update; `Scripts/claude-statusline.sh` writes them to
-///   `claude-limits.json` here. The numbers are as fresh as the last Claude
-///   Code session.
+/// - Claude: `GET api.anthropic.com/api/oauth/usage`, the endpoint behind
+///   Claude Code's `/usage`, authorised with the token Claude Code keeps in the
+///   Keychain. Undocumented, and the one grey-zone read in the app — so it is
+///   kept as quiet as it can be: only while the tab is open, at most once every
+///   five minutes, backing off on 429. The token is only ever read, never
+///   refreshed: refresh tokens are single-use, and rotating one here would sign
+///   Claude Code out. An expired token waits for Claude Code to renew it.
+///   The status line file (`Scripts/claude-statusline.sh`) stays as a second
+///   source for when the endpoint is unavailable; the newer of the two wins.
 /// - Codex: `codex app-server` answers `account/rateLimits/read` over JSON-RPC
 ///   on stdin/stdout — the same call Codex's own `/status` makes.
 ///
@@ -54,8 +54,24 @@ final class LimitsStore: ObservableObject {
     private var codexBuffer = Data()
     private var codexFetchedAt: Date?
 
+    /// The two Claude sources, kept apart and combined into `claude`.
+    private var claudeFromAPI = Snapshot()
+    private var claudeFromFile = Snapshot()
+    private var claudeLoading = false
+    private var claudeNextAttempt = Date.distantPast
+    private var claudeBackoff: TimeInterval = 0
+
     private let refreshInterval: TimeInterval = 60
+    private let claudeInterval: TimeInterval = 5 * 60
     private let codexTimeout: Duration = .seconds(20)
+
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.urlCache = nil
+        config.timeoutIntervalForRequest = 20
+        return URLSession(configuration: config)
+    }()
 
     func start() { enabled = true }
 
@@ -83,21 +99,36 @@ final class LimitsStore: ObservableObject {
 
     func refresh(force: Bool = false) {
         now = Date()
-        readClaude()
+        readClaudeFile()
+        if now >= claudeNextAttempt { fetchClaude() }
         let stale = codexFetchedAt.map { now.timeIntervalSince($0) >= refreshInterval - 1 } ?? true
         if force || stale { fetchCodex() }
     }
 
     // MARK: - Claude
 
-    private func readClaude() {
-        let url = Support.file(Self.claudeFileName)
-        guard let data = try? Data(contentsOf: url) else {
-            claude = Snapshot(failure: localized("Appears after a reply in Claude Code"))
-            return
+    /// The newer source with numbers in it; a failure from the endpoint rides
+    /// along so a stale figure is not mistaken for a live one.
+    private func publishClaude() {
+        let candidates = [claudeFromAPI, claudeFromFile].filter { $0.session != nil || $0.week != nil }
+        if var best = candidates.max(by: { ($0.updatedAt ?? .distantPast) < ($1.updatedAt ?? .distantPast) }) {
+            best.failure = claudeFromAPI.failure
+            claude = best
+        } else {
+            claude = Snapshot(
+                failure: claudeFromAPI.failure
+                    ?? (claudeLoading ? nil : localized("Appears after a reply in Claude Code"))
+            )
         }
-        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            claude = Snapshot(failure: localized("Could not read the limits file"))
+    }
+
+    private func readClaudeFile() {
+        defer { publishClaude() }
+        let url = Support.file(Self.claudeFileName)
+        guard let data = try? Data(contentsOf: url),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            claudeFromFile = Snapshot()
             return
         }
         let limits = root["rate_limits"] as? [String: Any] ?? [:]
@@ -109,7 +140,136 @@ final class LimitsStore: ObservableObject {
             return Window(usedPercent: used, resetsAt: reset)
         }
         let updated = (root["updated_at"] as? NSNumber).map { Date(timeIntervalSince1970: $0.doubleValue) }
-        claude = Snapshot(session: window("five_hour"), week: window("seven_day"), updatedAt: updated)
+        claudeFromFile = Snapshot(session: window("five_hour"), week: window("seven_day"), updatedAt: updated)
+    }
+
+    private enum ClaudeResult: Sendable {
+        case data(Data)
+        case signedOut
+        case rateLimited(retryAfter: TimeInterval?)
+        case failed
+    }
+
+    private func fetchClaude() {
+        guard !claudeLoading else { return }
+        claudeLoading = true
+        claudeNextAttempt = Date().addingTimeInterval(claudeInterval)
+        Task { [session] in
+            let result = await Self.requestClaudeUsage(session: session)
+            self.claudeLoading = false
+            self.handleClaude(result)
+        }
+    }
+
+    private func handleClaude(_ result: ClaudeResult) {
+        switch result {
+        case .data(let data):
+            if let snapshot = Self.parseClaudeUsage(data) {
+                claudeFromAPI = snapshot
+                claudeBackoff = 0
+            } else {
+                claudeFromAPI.failure = localized("Unexpected answer from Claude")
+            }
+        case .signedOut:
+            claudeFromAPI.failure = localized("Open Claude Code to renew sign-in")
+        case .rateLimited(let retryAfter):
+            claudeBackoff = min(max(claudeBackoff * 2, claudeInterval), 30 * 60)
+            let wait = max(retryAfter ?? 0, claudeBackoff)
+            claudeNextAttempt = Date().addingTimeInterval(wait)
+            claudeFromAPI.failure = localized("Claude asked to wait, retrying later")
+        case .failed:
+            claudeFromAPI.failure = localized("Claude did not answer")
+        }
+        publishClaude()
+    }
+
+    /// Off the main actor: `security` and the request both block for a while.
+    /// The token lives only inside this function.
+    private nonisolated static func requestClaudeUsage(session: URLSession) async -> ClaudeResult {
+        guard let token = await readClaudeToken() else { return .signedOut }
+        var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
+        request.setValue("Cyclop", forHTTPHeaderField: "User-Agent")
+        guard let (data, response) = try? await session.data(for: request),
+              let http = response as? HTTPURLResponse
+        else { return .failed }
+        switch http.statusCode {
+        case 200: return .data(data)
+        case 401, 403: return .signedOut
+        case 429:
+            let retry = http.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init)
+            return .rateLimited(retryAfter: retry)
+        default: return .failed
+        }
+    }
+
+    /// Through `/usr/bin/security` rather than `SecItemCopyMatching`: Claude
+    /// Code stores the item with that tool, so the tool is already on its access
+    /// list and no dialog appears — while Cyclop itself, re-signed ad hoc on
+    /// every build, would be asked about again after each one.
+    ///
+    /// Returns nil for a token that is missing or about to expire.
+    private nonisolated static func readClaudeToken() async -> String? {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        task.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
+        let output = Pipe()
+        task.standardOutput = output
+        task.standardError = FileHandle.nullDevice
+        do { try task.run() } catch { return nil }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let oauth = root["claudeAiOauth"] as? [String: Any],
+              let token = oauth["accessToken"] as? String, !token.isEmpty
+        else { return nil }
+        if let expires = (oauth["expiresAt"] as? NSNumber)?.doubleValue,
+           Date(timeIntervalSince1970: expires / 1000) < Date().addingTimeInterval(60) {
+            return nil
+        }
+        return token
+    }
+
+    /// Reads the `limits` list when present — the newer shape — and the flat
+    /// `five_hour` / `seven_day` objects otherwise.
+    private static func parseClaudeUsage(_ data: Data) -> Snapshot? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        var session: Window?
+        var week: Window?
+        if let limits = root["limits"] as? [[String: Any]] {
+            for item in limits {
+                guard let percent = (item["percent"] as? NSNumber)?.doubleValue else { continue }
+                let window = Window(usedPercent: percent, resetsAt: date(item["resets_at"]))
+                switch item["kind"] as? String {
+                case "session": session = window
+                case "weekly_all": week = window
+                default: break
+                }
+            }
+        }
+        func flat(_ key: String) -> Window? {
+            guard let item = root[key] as? [String: Any],
+                  let used = (item["utilization"] as? NSNumber)?.doubleValue
+            else { return nil }
+            return Window(usedPercent: used, resetsAt: date(item["resets_at"]))
+        }
+        session = session ?? flat("five_hour")
+        week = week ?? flat("seven_day")
+        guard session != nil || week != nil else { return nil }
+        return Snapshot(session: session, week: week, updatedAt: Date())
+    }
+
+    /// ISO 8601 with microseconds, which `ISO8601DateFormatter` will not take:
+    /// the fraction is dropped, a second is precise enough for a countdown.
+    private static func date(_ value: Any?) -> Date? {
+        guard var text = value as? String else { return nil }
+        if let dot = text.firstIndex(of: "."),
+           let zone = text[dot...].firstIndex(where: { $0 == "+" || $0 == "-" || $0 == "Z" }) {
+            text.removeSubrange(dot..<zone)
+        }
+        return ISO8601DateFormatter().date(from: text)
     }
 
     // MARK: - Codex
