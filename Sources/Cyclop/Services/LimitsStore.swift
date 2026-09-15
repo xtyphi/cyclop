@@ -154,6 +154,10 @@ final class LimitsStore: ObservableObject {
         guard !claudeLoading else { return }
         claudeLoading = true
         claudeNextAttempt = Date().addingTimeInterval(claudeInterval)
+        // The file was published a moment ago with loading still false; say
+        // again, so "appears after a reply" does not stand in for a request
+        // that is already on its way.
+        publishClaude()
         Task { [session] in
             let result = await Self.requestClaudeUsage(session: session)
             self.claudeLoading = false
@@ -186,7 +190,12 @@ final class LimitsStore: ObservableObject {
     /// Off the main actor: `security` and the request both block for a while.
     /// The token lives only inside this function.
     private nonisolated static func requestClaudeUsage(session: URLSession) async -> ClaudeResult {
-        guard let token = await readClaudeToken() else { return .signedOut }
+        let token: String
+        switch await readClaudeToken() {
+        case .token(let value): token = value
+        case .missing: return .signedOut
+        case .unavailable: return .failed
+        }
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
         request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
@@ -204,32 +213,48 @@ final class LimitsStore: ObservableObject {
         }
     }
 
+    /// A token missing or about to expire is `.missing` — Claude Code will put
+    /// a fresh one there. A keychain that did not answer is `.unavailable`.
+    private enum TokenRead: Sendable {
+        case token(String)
+        case missing
+        case unavailable
+    }
+
     /// Through `/usr/bin/security` rather than `SecItemCopyMatching`: Claude
     /// Code stores the item with that tool, so the tool is already on its access
     /// list and no dialog appears — while Cyclop itself, re-signed ad hoc on
     /// every build, would be asked about again after each one.
     ///
-    /// Returns nil for a token that is missing or about to expire.
-    private nonisolated static func readClaudeToken() async -> String? {
+    private nonisolated static func readClaudeToken() async -> TokenRead {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/security")
         task.arguments = ["find-generic-password", "-s", "Claude Code-credentials", "-w"]
         let output = Pipe()
         task.standardOutput = output
         task.standardError = FileHandle.nullDevice
-        do { try task.run() } catch { return nil }
+        do { try task.run() } catch { return .unavailable }
+        // A locked keychain puts up an unlock dialog and `security` waits on it
+        // for as long as it stays open. Without a deadline the read below would
+        // never return, and the Claude column would stop updating for good.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15) {
+            if task.isRunning { task.terminate() }
+        }
         let data = output.fileHandleForReading.readDataToEndOfFile()
         task.waitUntilExit()
-        guard task.terminationStatus == 0,
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let oauth = root["claudeAiOauth"] as? [String: Any],
+        // 44 is errSecItemNotFound: Claude Code has never signed in here.
+        if task.terminationReason == .exit, task.terminationStatus == 44 { return .missing }
+        guard task.terminationReason == .exit, task.terminationStatus == 0,
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return .unavailable }
+        guard let oauth = root["claudeAiOauth"] as? [String: Any],
               let token = oauth["accessToken"] as? String, !token.isEmpty
-        else { return nil }
+        else { return .missing }
         if let expires = (oauth["expiresAt"] as? NSNumber)?.doubleValue,
            Date(timeIntervalSince1970: expires / 1000) < Date().addingTimeInterval(60) {
-            return nil
+            return .missing
         }
-        return token
+        return .token(token)
     }
 
     /// Reads the `limits` list when present — the newer shape — and the flat
