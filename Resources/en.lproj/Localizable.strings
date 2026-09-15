@@ -117,3 +117,23 @@
 "Paste the script here" = "Paste the script here";
 "Ready" = "Ready";
 "Done" = "Done";
+
+/* Subscription limits and volume (personal build). */
+"Limits" = "Limits";
+"5 hours" = "5 hours";
+"Week" = "Week";
+"Full" = "Full";
+"Resets %@" = "Resets %@";
+"in %d d %d h" = "in %d d %d h";
+"just now" = "just now";
+"%d min ago" = "%d min ago";
+"%d h ago" = "%d h ago";
+"%d d ago" = "%d d ago";
+"Loading…" = "Loading…";
+"No data yet" = "No data yet";
+"Appears after a reply in Claude Code" = "Appears after a reply in Claude Code";
+"Could not read the limits file" = "Could not read the limits file";
+"Codex CLI not found" = "Codex CLI not found";
+"Codex did not answer" = "Codex did not answer";
+"Volume" = "Volume";
+"This output has no volume control" = "This output has no volume control";

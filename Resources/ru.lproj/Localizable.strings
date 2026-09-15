@@ -116,3 +116,23 @@
 "Paste the script here" = "Вставьте сюда сценарий";
 "Ready" = "Готово";
 "Done" = "Готово";
+
+/* Лимиты подписок и громкость (личная сборка). */
+"Limits" = "Лимиты";
+"5 hours" = "5 часов";
+"Week" = "Неделя";
+"Full" = "Заполнен";
+"Resets %@" = "Сброс %@";
+"in %d d %d h" = "через %d дн %d ч";
+"just now" = "только что";
+"%d min ago" = "%d мин назад";
+"%d h ago" = "%d ч назад";
+"%d d ago" = "%d дн назад";
+"Loading…" = "Загрузка…";
+"No data yet" = "Данных пока нет";
+"Appears after a reply in Claude Code" = "Появится после ответа в Claude Code";
+"Could not read the limits file" = "Не удалось прочитать файл лимитов";
+"Codex CLI not found" = "Codex CLI не найден";
+"Codex did not answer" = "Codex не ответил";
+"Volume" = "Громкость";
+"This output has no volume control" = "У этого выхода нет регулировки громкости";

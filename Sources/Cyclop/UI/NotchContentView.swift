@@ -102,6 +102,8 @@ struct NotchContentView: View {
             EmptyView()
         case .currency:
             CurrencyRateDate(currencies: vm.currencies)
+        case .limits:
+            EmptyView()
         case .notes:
             NotesCounter(notes: vm.notes)
         case .teleprompter:
@@ -158,7 +160,7 @@ struct NotchContentView: View {
     private var pane: some View {
         switch vm.tab {
         case .media:
-            MediaPane(media: vm.media)
+            MediaPane(media: vm.media, volume: vm.volume)
         case .shelf:
             ShelfPane(shelf: vm.shelf, isTargeted: panel.isDropTargeted)
         case .clipboard:
@@ -171,6 +173,8 @@ struct NotchContentView: View {
             TranslatePane(translator: vm.translator, wantsKeyboard: $panel.wantsKeyboard)
         case .currency:
             CurrencyPane(currencies: vm.currencies, wantsKeyboard: $panel.wantsKeyboard)
+        case .limits:
+            LimitsPane(limits: vm.limits)
         case .notes:
             NotesPane(notes: vm.notes, privacy: vm.privacy, wantsKeyboard: $panel.wantsKeyboard)
         case .teleprompter:

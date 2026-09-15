@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MediaPane: View {
     @ObservedObject var media: MediaController
+    let volume: SystemVolume
 
     @State private var scrubHover = false
     /// Set while dragging, so the bar follows the finger instead of the clock.
@@ -182,6 +183,9 @@ struct MediaPane: View {
                 .opacity(media.canSkip ? 1 : 0.35)
         }
         .frame(maxWidth: .infinity)
+        // Volume sits at the trailing edge, over the row rather than in it, so
+        // the transport stays centred on the column as before.
+        .overlay(alignment: .trailing) { VolumeControl(volume: volume) }
         .animation(.easeInOut(duration: 0.15), value: media.canSkip)
     }
 

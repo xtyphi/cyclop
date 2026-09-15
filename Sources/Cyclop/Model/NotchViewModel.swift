@@ -4,7 +4,7 @@ import Combine
 @MainActor
 final class NotchViewModel: ObservableObject {
     enum Tab: String, CaseIterable, Identifiable {
-        case media, shelf, clipboard, snippets, calendar, translate, currency, notes, teleprompter, settings
+        case media, shelf, clipboard, snippets, calendar, translate, currency, limits, notes, teleprompter, settings
         var id: String { rawValue }
 
         var symbol: String {
@@ -16,6 +16,7 @@ final class NotchViewModel: ObservableObject {
             case .calendar: return "calendar"
             case .translate: return "translate"
             case .currency: return "dollarsign.circle"
+            case .limits: return "gauge.with.dots.needle.33percent"
             case .notes: return "note.text"
             case .teleprompter: return "text.viewfinder"
             case .settings: return "gearshape.fill"
@@ -31,6 +32,7 @@ final class NotchViewModel: ObservableObject {
             case .calendar: return localized("Calendar")
             case .translate: return localized("Translate")
             case .currency: return localized("Currency")
+            case .limits: return localized("Limits")
             case .notes: return localized("Notes")
             case .teleprompter: return localized("Teleprompter")
             case .settings: return localized("Settings")
@@ -61,7 +63,7 @@ final class NotchViewModel: ObservableObject {
         /// calendar, so it sits last, furthest from the tabs people actually
         /// rest on.
         static let leftRail: [Tab] = [.media, .shelf, .clipboard, .snippets, .calendar, .translate]
-        static let rightRail: [Tab] = [.notes, .currency, .teleprompter, .settings]
+        static let rightRail: [Tab] = [.notes, .limits, .currency, .teleprompter, .settings]
     }
 
     /// What every screen's panel adds up to, kept by `NotchController`: this
@@ -125,6 +127,7 @@ final class NotchViewModel: ObservableObject {
         switch target {
         case .media:
             media.start()
+            volume.start()
             if isPanelActive { media.setActive(true) }
         case .clipboard:
             clipboard.start()
@@ -139,6 +142,9 @@ final class NotchViewModel: ObservableObject {
             screenshotFolder.resumeIfEnabled()
         case .currency:
             currencies.start()
+        case .limits:
+            limits.start()
+            syncLimits()
         case .snippets, .translate, .notes, .teleprompter, .settings:
             break
         }
@@ -146,11 +152,14 @@ final class NotchViewModel: ObservableObject {
 
     private func stopBackground(of target: Tab) {
         switch target {
-        case .media: media.stop()
+        case .media:
+            media.stop()
+            volume.stop()
         case .clipboard: clipboard.stop()
         case .calendar: calendar.stop()
         case .shelf: screenshotFolder.stop()
         case .currency: currencies.stop()
+        case .limits: limits.stop()
         case .snippets, .translate, .notes, .teleprompter, .settings: break
         }
     }
@@ -163,6 +172,14 @@ final class NotchViewModel: ObservableObject {
         isPanelActive = active
         if isVisible(.media) { media.setActive(active) }
         if isVisible(.calendar) { calendar.setActive(active) }
+        syncLimits()
+    }
+
+    /// The limits refresh only while their tab is what an open panel shows:
+    /// each Codex read starts a process, and nobody is reading the numbers
+    /// behind a closed panel.
+    private func syncLimits() {
+        limits.setActive(isPanelActive && tab == .limits && isVisible(.limits))
     }
 
     private var started = false
@@ -196,6 +213,7 @@ final class NotchViewModel: ObservableObject {
             // Rates update on a timer already; opening the tab asks once more
             // so a stale cache from the last few hours does not sit there.
             if tab == .currency { currencies.refreshIfNeeded() }
+            syncLimits()
             // Leaving the notes sweeps out the blank ones — they cost one
             // hover to recreate, and a trail of empty cards is the clutter a
             // scratchpad exists to avoid.
@@ -227,6 +245,8 @@ final class NotchViewModel: ObservableObject {
     let calendar: CalendarStore
     let translator: Translator
     let currencies: CurrencyStore
+    let limits: LimitsStore
+    let volume: SystemVolume
     let snippets: SnippetStore
     let notes: NoteStore
     let teleprompter: TeleprompterStore
@@ -243,6 +263,8 @@ final class NotchViewModel: ObservableObject {
         self.calendar = CalendarStore()
         self.translator = Translator()
         self.currencies = CurrencyStore()
+        self.limits = LimitsStore()
+        self.volume = SystemVolume()
         self.snippets = SnippetStore()
         self.notes = NoteStore()
         self.teleprompter = TeleprompterStore()
