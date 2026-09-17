@@ -14,7 +14,7 @@ VERSION="$(sed -n 's/^VERSION=//p' "$ROOT/Scripts/version" 2>/dev/null || echo 0
 # the newest SDK that predates it.
 if [ -z "${SDKROOT:-}" ] && [ "$(xcode-select -p 2>/dev/null)" = /Library/Developer/CommandLineTools ] \
     && [ ! -e /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib ]; then
-    SDK26="$(ls -d /Library/Developer/CommandLineTools/SDKs/MacOSX26.*.sdk 2>/dev/null | sort -V | tail -1)"
+    SDK26="$(ls -d /Library/Developer/CommandLineTools/SDKs/MacOSX26.*.sdk 2>/dev/null | sort -V | tail -1 || true)"
     if [ -n "$SDK26" ]; then
         export SDKROOT="$SDK26"
         echo "==> no SwiftUI macro plugin in the Command Line Tools, using $(basename "$SDK26")"

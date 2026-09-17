@@ -142,10 +142,15 @@ static void publish(void) {
             // cover deduplicated by picture alone never came back for the
             // second track. The same happened when the player published the
             // new cover a beat before the new title.
-            NSString *artworkID = [NSString stringWithFormat:@"%@\x01%@\x01%@\x01%@",
-                info[@"kMRMediaRemoteNowPlayingInfoArtworkIdentifier"] ?: @"",
-                title, out[@"artist"], out[@"album"]];
             NSData *artwork = info[@"kMRMediaRemoteNowPlayingInfoArtworkData"];
+            // Without an identifier the picture itself stands in for one, or a
+            // cover arriving after the title would match the stale one sent
+            // before it.
+            NSString *pictureID = info[@"kMRMediaRemoteNowPlayingInfoArtworkIdentifier"]
+                ?: [NSString stringWithFormat:@"%lu-%lu",
+                    (unsigned long)artwork.length, (unsigned long)artwork.hash];
+            NSString *artworkID = [NSString stringWithFormat:@"%@\x01%@\x01%@\x01%@",
+                pictureID, title, out[@"artist"], out[@"album"]];
             if (artwork.length > 0 && ![artworkID isEqualToString:sArtworkID]) {
                 out[@"artwork"] = [artwork base64EncodedStringWithOptions:0];
                 sArtworkID = artworkID;
