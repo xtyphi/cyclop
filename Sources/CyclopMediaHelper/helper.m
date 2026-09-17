@@ -136,7 +136,15 @@ static void publish(void) {
                 ? @([(NSDate *)stamp timeIntervalSince1970])
                 : @0;
 
-            NSString *artworkID = info[@"kMRMediaRemoteNowPlayingInfoArtworkIdentifier"] ?: title;
+            // Keyed by the track as well as the picture. The identifier is a
+            // hash of the image, so two tracks off one album share it, and the
+            // app drops its cover whenever title, artist or album change: a
+            // cover deduplicated by picture alone never came back for the
+            // second track. The same happened when the player published the
+            // new cover a beat before the new title.
+            NSString *artworkID = [NSString stringWithFormat:@"%@\x01%@\x01%@\x01%@",
+                info[@"kMRMediaRemoteNowPlayingInfoArtworkIdentifier"] ?: @"",
+                title, out[@"artist"], out[@"album"]];
             NSData *artwork = info[@"kMRMediaRemoteNowPlayingInfoArtworkData"];
             if (artwork.length > 0 && ![artworkID isEqualToString:sArtworkID]) {
                 out[@"artwork"] = [artwork base64EncodedStringWithOptions:0];

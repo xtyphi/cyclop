@@ -9,6 +9,18 @@ CONFIG="${1:-release}"
 APP="$ROOT/build/Cyclop.app"
 VERSION="$(sed -n 's/^VERSION=//p' "$ROOT/Scripts/version" 2>/dev/null || echo 0.1.0)"
 
+# The macOS 27 SDK turns SwiftUI's @State into a macro whose plugin ships
+# with Xcode, not with the Command Line Tools. Without Xcode, build against
+# the newest SDK that predates it.
+if [ -z "${SDKROOT:-}" ] && [ "$(xcode-select -p 2>/dev/null)" = /Library/Developer/CommandLineTools ] \
+    && [ ! -e /Library/Developer/CommandLineTools/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib ]; then
+    SDK26="$(ls -d /Library/Developer/CommandLineTools/SDKs/MacOSX26.*.sdk 2>/dev/null | sort -V | tail -1)"
+    if [ -n "$SDK26" ]; then
+        export SDKROOT="$SDK26"
+        echo "==> no SwiftUI macro plugin in the Command Line Tools, using $(basename "$SDK26")"
+    fi
+fi
+
 echo "==> swift build -c $CONFIG"
 swift build -c "$CONFIG" --package-path "$ROOT"
 BIN="$(swift build -c "$CONFIG" --package-path "$ROOT" --show-bin-path)/Cyclop"
