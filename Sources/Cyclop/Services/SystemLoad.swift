@@ -28,6 +28,10 @@ final class SystemLoad: ObservableObject {
 
     private var timer: Timer?
     private var previousTicks: [UInt32]?
+    /// Taken once and kept. `mach_host_self` hands out a send right on every
+    /// call, and a right nobody gives back is a right the process keeps: at
+    /// three calls a second an open tab would collect thousands of them.
+    private let host = mach_host_self()
 
     // MARK: - Lifecycle
 
@@ -60,7 +64,10 @@ final class SystemLoad: ObservableObject {
         var next = Sample()
         next.cpu = readCPU() ?? current.cpu
         next.memory = readMemory() ?? current.memory
-        next.gpu = readGPU() ?? current.gpu
+        // No carrying the last reading forward: a driver that stops
+        // publishing would leave the card frozen on a number that stopped
+        // being true, which is worse than no card.
+        next.gpu = readGPU()
         current = next
         history.append(next)
         if history.count > Self.historyLength {
@@ -79,7 +86,7 @@ final class SystemLoad: ObservableObject {
         var info: processor_info_array_t?
         var infoCount: mach_msg_type_number_t = 0
         let status = host_processor_info(
-            mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &count, &info, &infoCount
+            host, PROCESSOR_CPU_LOAD_INFO, &count, &info, &infoCount
         )
         guard status == KERN_SUCCESS, let info else { return nil }
         defer {
@@ -130,13 +137,13 @@ final class SystemLoad: ObservableObject {
         )
         let status = withUnsafeMutablePointer(to: &stats) {
             $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
-                host_statistics64(mach_host_self(), HOST_VM_INFO64, $0, &count)
+                host_statistics64(host, HOST_VM_INFO64, $0, &count)
             }
         }
         guard status == KERN_SUCCESS else { return nil }
 
         var rawPageSize: vm_size_t = 0
-        guard host_page_size(mach_host_self(), &rawPageSize) == KERN_SUCCESS else { return nil }
+        guard host_page_size(host, &rawPageSize) == KERN_SUCCESS else { return nil }
         let pageSize = Double(rawPageSize)
         let total = Double(ProcessInfo.processInfo.physicalMemory)
         guard total > 0 else { return nil }
