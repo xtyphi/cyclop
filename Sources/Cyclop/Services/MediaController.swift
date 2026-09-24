@@ -134,7 +134,14 @@ final class MediaController: ObservableObject {
         guard !snapshot.isEmpty else { return clear() }
 
         let key = "\(snapshot.title)|\(snapshot.artist)|\(snapshot.album)"
+        // The helper reads the owning pid one call ahead of the record, so the
+        // first report of a new track still names whoever was playing before
+        // it — enough for a click on the cover to raise the wrong app. Asking
+        // again the moment the track changes costs one line on a pipe and
+        // closes that window to the time it takes to answer.
+        let switched = track?.key != key
         track = Track(title: snapshot.title, artist: snapshot.artist, album: snapshot.album, key: key)
+        if switched, feedAvailable { feed.refresh() }
         isPlaying = snapshot.isPlaying || snapshot.rate > 0
         duration = snapshot.duration
         sourceName = snapshot.source

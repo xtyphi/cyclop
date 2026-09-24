@@ -59,9 +59,7 @@ struct MediaPane: View {
             content()
                 .contentShape(Rectangle())
                 .onTapGesture { media.revealSource() }
-                .onHover { inside in
-                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
-                }
+                .modifier(PointingHandCursor())
                 .help(media.sourceName.map { localized("Open %@", $0) } ?? "")
         } else {
             content()
@@ -226,5 +224,30 @@ struct MediaPane: View {
                 .foregroundStyle(Theme.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A hand over anything that leads somewhere.
+///
+/// The pushed cursor is remembered rather than popped on the way out alone:
+/// the view under the pointer can go away while the pointer is still on it —
+/// the player the cover pointed at quits, the track ends — and a push with no
+/// matching pop leaves the whole Mac with a hand cursor until something else
+/// happens to reset it.
+private struct PointingHandCursor: ViewModifier {
+    @State private var pushed = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { inside in
+                guard inside != pushed else { return }
+                pushed = inside
+                if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
+            .onDisappear {
+                guard pushed else { return }
+                pushed = false
+                NSCursor.pop()
+            }
     }
 }
