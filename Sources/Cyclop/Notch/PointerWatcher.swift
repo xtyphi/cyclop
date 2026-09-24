@@ -152,9 +152,13 @@ final class PointerWatcher {
         var inside = (isInside ? closeRect : openRect).contains(point)
 
         // Held down until the pointer is genuinely away, and then forgotten:
-        // the next arrival is a new hover like any other.
+        // the next arrival is a new hover like any other. Away is measured
+        // against the panel as it stood open, not against the folded notch —
+        // the cover just clicked lies in the body, well below the strip that
+        // opens the panel, so the collapsed rect would call the pointer gone
+        // while it is still sitting on the artwork.
         if isSuppressed {
-            if inside {
+            if closeRect.contains(point) {
                 inside = false
             } else {
                 isSuppressed = false
