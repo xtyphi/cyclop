@@ -141,3 +141,9 @@
 "Open Claude Code to renew sign-in" = "Open Claude Code to renew sign-in";
 "Claude asked to wait, retrying later" = "Claude asked to wait, retrying later";
 "Claude did not answer" = "Claude did not answer";
+
+/* System tab */
+"System" = "System";
+"CPU" = "CPU";
+"Memory" = "Memory";
+"GPU" = "GPU";

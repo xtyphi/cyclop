@@ -140,3 +140,9 @@
 "Open Claude Code to renew sign-in" = "Откройте Claude Code, чтобы обновить вход";
 "Claude asked to wait, retrying later" = "Claude просит подождать, повторю позже";
 "Claude did not answer" = "Claude не ответил";
+
+/* Вкладка «Система» */
+"System" = "Система";
+"CPU" = "Процессор";
+"Memory" = "Память";
+"GPU" = "Видео";
