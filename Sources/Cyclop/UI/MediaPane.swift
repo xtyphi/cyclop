@@ -3,6 +3,9 @@ import SwiftUI
 struct MediaPane: View {
     @ObservedObject var media: MediaController
     let volume: SystemVolume
+    /// Called along with the reveal: the panel has done its job the moment
+    /// the other app comes forward.
+    var dismiss: () -> Void = {}
 
     @State private var scrubHover = false
     /// Set while dragging, so the bar follows the finger instead of the clock.
@@ -58,7 +61,10 @@ struct MediaPane: View {
         if media.canRevealSource {
             content()
                 .contentShape(Rectangle())
-                .onTapGesture { media.revealSource() }
+                .onTapGesture {
+                    media.revealSource()
+                    dismiss()
+                }
                 .modifier(PointingHandCursor())
                 .help(media.sourceName.map { localized("Open %@", $0) } ?? "")
         } else {

@@ -62,6 +62,7 @@ final class PointerWatcher {
         timer?.invalidate()
         timer = nil
         awaitingSince = nil
+        isSuppressed = false
         // The last sent interactivity dies with the panel it was sent to. The
         // watcher outlives a rebuild, and a fresh panel starts click-through;
         // holding on to the old "already interactive" would swallow the first
@@ -123,6 +124,21 @@ final class PointerWatcher {
         isInside = value
     }
 
+    /// Stop treating the pointer as a request to open until it has left.
+    ///
+    /// For the one gesture that means "I am going elsewhere": clicking the
+    /// cover to be taken to the player raises another app, and the pointer is
+    /// left sitting on a panel the user is done with. Without this it reads as
+    /// a fresh hover the moment the panel folds, and the notch springs back
+    /// open under a pointer already on its way somewhere else.
+    func suppressUntilExit() {
+        awaitingSince = nil
+        isInside = false
+        isSuppressed = true
+    }
+
+    private var isSuppressed = false
+
     private func tick() {
         let point = NSEvent.mouseLocation
         updateRate(for: point)
@@ -133,7 +149,17 @@ final class PointerWatcher {
             onInteractiveChange?(interactive)
         }
 
-        let inside = (isInside ? closeRect : openRect).contains(point)
+        var inside = (isInside ? closeRect : openRect).contains(point)
+
+        // Held down until the pointer is genuinely away, and then forgotten:
+        // the next arrival is a new hover like any other.
+        if isSuppressed {
+            if inside {
+                inside = false
+            } else {
+                isSuppressed = false
+            }
+        }
 
         // Whether the panel is open and where the pointer is are two separate
         // facts, and only one of them is tracked here. They are supposed to

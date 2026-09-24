@@ -131,6 +131,12 @@ final class NotchScreenPanel {
             state.wantsKeyboard = true
         }
 
+        state.onDismiss = { [weak self] in
+            guard let self else { return }
+            setOpen(false)
+            pointer.suppressUntilExit()
+        }
+
         panel.contentView = root
         panel.ignoresMouseEvents = true
         panel.setFrame(geometry.windowFrame, display: false)

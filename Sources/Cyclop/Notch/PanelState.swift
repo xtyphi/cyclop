@@ -22,6 +22,11 @@ final class PanelState: ObservableObject {
     /// can recompute what the shared model needs to know about the panels.
     var onChange: (() -> Void)?
 
+    /// Folds this screen's panel and keeps it folded until the pointer leaves.
+    /// Set by the screen that owns the panel; called by a pane whose click
+    /// sends the user somewhere else entirely.
+    var onDismiss: (() -> Void)?
+
     init(geometry: NotchGeometry, vm: NotchViewModel) {
         self.geometry = geometry
         self.vm = vm
