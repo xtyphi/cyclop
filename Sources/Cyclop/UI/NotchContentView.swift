@@ -246,7 +246,11 @@ private struct Rail: View {
                     panel.select(tab)
                 } label: {
                     Image(systemName: tab.symbol)
-                        .font(.system(size: 12, weight: .medium))
+                        // Bigger than the 12 pt it started at, inside the same
+                        // box: the box is already at the ceiling `railIconHeight`
+                        // allows, so growing it would shrink every icon on the
+                        // rail instead of enlarging this one.
+                        .font(.system(size: 14, weight: .medium))
                         .frame(width: 30, height: panel.geometry.railIconHeight)
                         .background(
                             RoundedRectangle(cornerRadius: 7, style: .continuous)
