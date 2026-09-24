@@ -28,6 +28,14 @@ final class MediaController: ObservableObject {
     /// both skip fine.
     @Published private(set) var canSkip = true
 
+    /// Whether the source can be brought forward at all: a session whose
+    /// owner has since quit leaves its name on screen but nothing to raise.
+    @Published private(set) var canRevealSource = false
+
+    private var sourcePID: pid_t? {
+        didSet { canRevealSource = runningSource != nil }
+    }
+
     private let feed = NowPlayingFeed()
     private var feedAvailable = true
 
@@ -130,6 +138,7 @@ final class MediaController: ObservableObject {
         isPlaying = snapshot.isPlaying || snapshot.rate > 0
         duration = snapshot.duration
         sourceName = snapshot.source
+        sourcePID = snapshot.sourcePID
         // Both directions travel together: no player has ever offered one
         // without the other, and two separately dimmed arrows would read as
         // a glitch rather than a limit.
@@ -187,8 +196,27 @@ final class MediaController: ObservableObject {
         duration = 0
         position = 0
         sourceName = nil
+        sourcePID = nil
         canSkip = true
         updateTicker()
+    }
+
+    // MARK: - Source
+
+    private var runningSource: NSRunningApplication? {
+        sourcePID.flatMap { NSRunningApplication(processIdentifier: $0) }
+    }
+
+    /// Brings the player forward — the browser tab, Spotify, whatever owns the
+    /// session. A tab is as far as this goes: which tab inside that browser is
+    /// playing is not something the app is told, and is not worth guessing at
+    /// by driving another app's windows.
+    func revealSource() {
+        guard let app = runningSource else {
+            canRevealSource = false
+            return
+        }
+        app.activate(options: [.activateAllWindows])
     }
 
     // MARK: - Fallback: scriptable players only
@@ -223,6 +251,9 @@ final class MediaController: ObservableObject {
 
             self.activeApp = state.app
             self.sourceName = state.app.displayName
+            self.sourcePID = NSRunningApplication
+                .runningApplications(withBundleIdentifier: state.app.bundleID).first?
+                .processIdentifier
             self.track = Track(title: state.title, artist: state.artist, album: state.album, key: state.key)
             self.isPlaying = state.isPlaying
             self.duration = state.duration

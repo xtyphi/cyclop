@@ -26,7 +26,9 @@ final class NotchViewModel: ObservableObject {
 
         var title: String {
             switch self {
-            case .media: return localized("Music")
+            // Named for what it is rather than for music: the session it
+            // shows is as often a video in a browser tab.
+            case .media: return localized("Player")
             case .shelf: return localized("Shelf")
             case .clipboard: return localized("Clipboard")
             case .snippets: return localized("Snippets")

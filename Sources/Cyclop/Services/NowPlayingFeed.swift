@@ -19,6 +19,9 @@ final class NowPlayingFeed {
         var artwork: Data?
         /// Name of the app owning the session, resolved from its pid.
         var source: String?
+        /// The owner itself, kept alongside the name so the pane can bring it
+        /// to the front — a name cannot be activated.
+        var sourcePID: pid_t?
         /// Command codes the player offers right now, or nil when the helper
         /// could not ask. Nil means unknown, not none — a browser tab with a
         /// single video offers no skip commands at all, and that is worth
@@ -207,6 +210,7 @@ final class NowPlayingFeed {
             snapshot.artwork = artwork
         }
         if let pid = object["pid"] as? Int, pid > 0 {
+            snapshot.sourcePID = pid_t(pid)
             snapshot.source = NSRunningApplication(processIdentifier: pid_t(pid))?.localizedName
         }
         if let codes = object["commands"] as? [Int] {

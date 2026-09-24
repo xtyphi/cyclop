@@ -3,7 +3,6 @@
    a phrase can be reworded here without touching the code. */
 
 /* Tabs */
-"Music" = "Music";
 "Shelf" = "Shelf";
 "Clipboard" = "Clipboard";
 "Snippets" = "Snippets";
@@ -147,3 +146,6 @@
 "CPU" = "CPU";
 "Memory" = "Memory";
 "GPU" = "GPU";
+
+"Player" = "Player";
+"Open %@" = "Open %@";

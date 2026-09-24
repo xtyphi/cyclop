@@ -15,17 +15,21 @@ struct MediaPane: View {
     var body: some View {
         if let track = media.track {
             HStack(spacing: 18) {
-                artwork(for: track)
+                reveal { artwork(for: track) }
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(track.title)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                    Text(subtitle(for: track))
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(Theme.secondary)
-                        .lineLimit(1)
-                        .padding(.top, 3)
+                    reveal {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(track.title)
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                            Text(subtitle(for: track))
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(Theme.secondary)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
 
                     Spacer(minLength: 6)
                     controls
@@ -40,6 +44,27 @@ struct MediaPane: View {
             .animation(Theme.artworkAnimation, value: track.key)
         } else {
             emptyState
+        }
+    }
+
+    /// Cover and title lead back to whatever is playing: the browser with the
+    /// video in it, Spotify, Music. Wrapped rather than given a button style,
+    /// so the artwork and the text keep looking like what they are — the
+    /// pointer turning into a hand is the whole invitation. Without a source
+    /// to raise the click is simply not there, instead of being there and
+    /// doing nothing.
+    @ViewBuilder
+    private func reveal<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        if media.canRevealSource {
+            content()
+                .contentShape(Rectangle())
+                .onTapGesture { media.revealSource() }
+                .onHover { inside in
+                    if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+                }
+                .help(media.sourceName.map { localized("Open %@", $0) } ?? "")
+        } else {
+            content()
         }
     }
 
