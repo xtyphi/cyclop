@@ -15,10 +15,10 @@ final class SMC {
     /// differ between Macs, so they are discovered rather than assumed.
     private var cpuKeys: [UInt32]?
 
-    /// Sensors averaged into one figure. All of them on a laptop is a few
-    /// dozen reads a second for a number shown to one decimal — enough of
-    /// them to be representative, few enough to stay unnoticeable.
-    private static let maxSensors = 24
+    /// Ceiling on how many sensors are read each time. Modern chips publish
+    /// dozens; this is enough to cover every core on a laptop and keeps the
+    /// per-second cost in single-digit milliseconds.
+    private static let maxSensors = 64
 
     deinit {
         if connection != 0 { IOServiceClose(connection) }
@@ -26,22 +26,24 @@ final class SMC {
 
     // MARK: - Reading
 
-    /// Average temperature of the processor cores, in degrees Celsius.
+    /// Temperature of the hottest processor core, in degrees Celsius.
+    ///
+    /// The hottest rather than the average of all of them: that is what the
+    /// figure is for. A chip with four cores working and six idle is warm,
+    /// and averaging the idle ones in describes a Mac that is not there —
+    /// the same reason nobody averages a fever with room temperature.
     func cpuTemperature() -> Double? {
         guard open() else { return nil }
         let keys = cpuKeys ?? discoverCPUKeys()
         cpuKeys = keys
         guard !keys.isEmpty else { return nil }
 
-        var sum = 0.0
-        var count = 0
+        var hottest: Double?
         for key in keys {
             guard let value = read(key), value > 5, value < 130 else { continue }
-            sum += value
-            count += 1
+            hottest = max(hottest ?? value, value)
         }
-        guard count > 0 else { return nil }
-        return sum / Double(count)
+        return hottest
     }
 
     private func open() -> Bool {
@@ -55,10 +57,12 @@ final class SMC {
         return true
     }
 
-    /// Every key whose name starts with the prefix the chip uses for core
-    /// temperatures: `Tp` on Apple silicon, `TC` on the Intel Macs before it.
-    /// The whole key list is walked once — 2 ms, against a wrong guess at a
-    /// name that would leave the card blank on somebody else's Mac.
+    /// Every key whose name starts with a prefix the chip uses for core
+    /// temperatures: `Tp` and `Te` on Apple silicon — performance cores and
+    /// efficiency cores, and a chip can be busy on either — or `TC` on the
+    /// Intel Macs before it. The whole key list is walked once, which costs
+    /// 2 ms, against a wrong guess at a name that would leave the card blank
+    /// on somebody else's Mac.
     private func discoverCPUKeys() -> [UInt32] {
         guard let total = read(Self.fourCC("#KEY")).map({ Int($0) }), total > 0, total < 10_000 else {
             return []
@@ -71,7 +75,7 @@ final class SMC {
             query.data32 = UInt32(index)
             guard let out = call(query) else { continue }
             let name = Self.name(of: out.key)
-            if name.hasPrefix("Tp"), apple.count < Self.maxSensors {
+            if name.hasPrefix("Tp") || name.hasPrefix("Te"), apple.count < Self.maxSensors {
                 apple.append(out.key)
             } else if name.hasPrefix("TC"), intel.count < Self.maxSensors {
                 intel.append(out.key)
