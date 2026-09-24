@@ -17,6 +17,9 @@ final class SystemLoad: ObservableObject {
         var cpu: Double = 0
         var memory: Double = 0
         var gpu: Double?
+        /// Processor temperature in degrees Celsius, where the Mac publishes
+        /// one at all.
+        var temperature: Double?
     }
 
     @Published private(set) var current = Sample()
@@ -32,6 +35,7 @@ final class SystemLoad: ObservableObject {
     /// call, and a right nobody gives back is a right the process keeps: at
     /// three calls a second an open tab would collect thousands of them.
     private let host = mach_host_self()
+    private let smc = SMC()
 
     // MARK: - Lifecycle
 
@@ -68,6 +72,7 @@ final class SystemLoad: ObservableObject {
         // publishing would leave the card frozen on a number that stopped
         // being true, which is worse than no card.
         next.gpu = readGPU()
+        next.temperature = smc.cpuTemperature()
         current = next
         history.append(next)
         if history.count > Self.historyLength {

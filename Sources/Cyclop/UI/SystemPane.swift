@@ -13,7 +13,11 @@ struct SystemPane: View {
                 name: localized("CPU"),
                 value: load.current.cpu,
                 color: Color(red: 0.24, green: 0.60, blue: 1.0),
-                series: load.history.map(\.cpu)
+                series: load.history.map(\.cpu),
+                // Beside the load rather than in a card of its own: it is the
+                // same story about the same chip, and a fourth card would take
+                // its width from the three that are already there.
+                aside: load.current.temperature.map { String(format: "%.0f°", $0) }
             )
             card(
                 symbol: "memorychip",
@@ -40,7 +44,8 @@ struct SystemPane: View {
         name: String,
         value: Double,
         color: Color,
-        series: [Double]
+        series: [Double],
+        aside: String? = nil
     ) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -52,6 +57,11 @@ struct SystemPane: View {
                     .foregroundStyle(Theme.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
+                if let aside {
+                    Text(aside)
+                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Theme.tertiary)
+                }
                 Text(String(format: "%.1f%%", value))
                     .font(.system(size: 13, weight: .semibold).monospacedDigit())
                     .foregroundStyle(.white)
