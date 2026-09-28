@@ -116,6 +116,10 @@ final class NotchViewModel: ObservableObject {
             if started { startBackground(of: target) }
         } else {
             hiddenTabs.insert(target)
+            // Music the focus notice paused has to be started again while the
+            // player can still hear the command: once its feed stops, a Play
+            // goes nowhere and the track stays paused.
+            if target == .media { focus.alert.dismiss() }
             stopBackground(of: target)
             // Done before the icon goes, so the pane never shows a tab the rail
             // no longer has — and `tab`'s own didSet handles what leaving it
