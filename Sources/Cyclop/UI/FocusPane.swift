@@ -42,9 +42,14 @@ struct FocusPane: View {
 
     private var dial: some View {
         ZStack {
+            // Inset by half the line, so the whole ring lies inside the
+            // frame. A stroke is drawn centred on the path, and the half
+            // outside it was cut off by the pane's clip along the left edge.
             Circle()
+                .inset(by: 3)
                 .stroke(Theme.surfaceHover, lineWidth: 6)
             Circle()
+                .inset(by: 3)
                 .trim(from: 0, to: timer.progress)
                 .stroke(accent, style: StrokeStyle(lineWidth: 6, lineCap: .round))
                 .rotationEffect(.degrees(-90))
