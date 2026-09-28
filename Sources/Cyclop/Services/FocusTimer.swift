@@ -121,10 +121,11 @@ final class FocusTimer: ObservableObject {
     }
 
     /// Ends the running phase now, as if its time had run out — a sprint
-    /// finished early still counts, and still earns its break.
+    /// finished early still counts, still earns its break, and still gets
+    /// the chime that says the break has begun.
     func skip() {
         guard phase != .idle else { return }
-        finishPhase(at: Date(), announce: false)
+        finishPhase(at: Date(), announce: true)
     }
 
     /// Back to idle without counting anything.
