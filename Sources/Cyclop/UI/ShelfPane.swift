@@ -24,22 +24,38 @@ struct ShelfPane: View {
             if shelf.items.isEmpty {
                 dropHint
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(shelf.items) { item in
-                            ShelfCard(item: item, shelf: shelf, isHovered: hoveredID == item.id)
-                                .background(
-                                    GeometryReader { geo in
-                                        Color.clear.preference(
-                                            key: CardFramesKey.self,
-                                            value: [item.id: geo.frame(in: .named("shelf"))]
+                GeometryReader { strip in
+                    ScrollViewReader { scroller in
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: Self.cardSpacing) {
+                                ForEach(shelf.items) { item in
+                                    ShelfCard(item: item, shelf: shelf, isHovered: hoveredID == item.id)
+                                        .background(
+                                            GeometryReader { geo in
+                                                Color.clear.preference(
+                                                    key: CardFramesKey.self,
+                                                    value: [item.id: geo.frame(in: .named("shelf"))]
+                                                )
+                                            }
                                         )
-                                    }
-                                )
+                                }
+                            }
+                            .padding(.horizontal, 2)
+                            .frame(maxHeight: .infinity)
+                        }
+                        .overlay(alignment: .leading) { pager(.back, in: strip.size.width, scroller) }
+                        .overlay(alignment: .trailing) { pager(.forward, in: strip.size.width, scroller) }
+                        // A new screenshot lands at the head of the strip, and
+                        // a strip paged halfway along would hide the very card
+                        // the user just took.
+                        .onChange(of: shelf.items.first?.id) { _, newest in
+                            firstVisible = 0
+                            guard let newest else { return }
+                            withAnimation(Theme.contentAnimation) {
+                                scroller.scrollTo(newest, anchor: .leading)
+                            }
                         }
                     }
-                    .padding(.horizontal, 2)
-                    .frame(maxHeight: .infinity)
                 }
                 .coordinateSpace(name: "shelf")
                 .onContinuousHover(coordinateSpace: .named("shelf")) { phase in
@@ -61,6 +77,54 @@ struct ShelfPane: View {
             }
         }
         .padding(.top, 2)
+    }
+
+    // MARK: - Paging
+
+    /// Card plus the gap after it: how far one step of the strip moves.
+    private static let cardSpacing: CGFloat = 10
+    private static let cardStride: CGFloat = 86 + cardSpacing
+
+    /// Leftmost card currently aimed at. A gesture can scroll past it without
+    /// telling us — the arrows then jump back to where they think they are,
+    /// which is one visible correction and no worse than a disabled arrow.
+    @State private var firstVisible = 0
+
+    private enum Direction { case back, forward }
+
+    /// Arrows for the strip, and nothing else if the cards already fit.
+    ///
+    /// The strip has always scrolled by gesture, and a gesture is the one way
+    /// in that depends on the hardware in front of the Mac: a plain mouse has
+    /// no sideways scroll to give, and a shelf past its sixth card was then
+    /// simply out of reach (#60).
+    @ViewBuilder
+    private func pager(_ direction: Direction, in width: CGFloat, _ scroller: ScrollViewProxy) -> some View {
+        let visible = max(Int(width / Self.cardStride), 1)
+        let last = max(shelf.items.count - visible, 0)
+        let target = direction == .back
+            ? max(firstVisible - max(visible - 1, 1), 0)
+            : min(firstVisible + max(visible - 1, 1), last)
+        if shelf.items.count > visible, target != firstVisible {
+            Button {
+                firstVisible = target
+                guard shelf.items.indices.contains(target) else { return }
+                withAnimation(Theme.contentAnimation) {
+                    scroller.scrollTo(shelf.items[target].id, anchor: .leading)
+                }
+            } label: {
+                Image(systemName: direction == .back ? "chevron.left" : "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 46)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(Theme.surfaceHover)
+                    )
+            }
+            .buttonStyle(.plain)
+            .padding(direction == .back ? .leading : .trailing, 2)
+        }
     }
 
     /// The one decision both signals feed: which frame holds the last known
