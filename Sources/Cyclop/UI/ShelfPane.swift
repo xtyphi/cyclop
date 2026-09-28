@@ -48,6 +48,10 @@ struct ShelfPane: View {
                         // A new screenshot lands at the head of the strip, and
                         // a strip paged halfway along would hide the very card
                         // the user just took.
+                        // The wheel, for the Macs whose pointing device has no
+                        // sideways scroll to give.
+                        .onAppear { watchWheel(in: strip.size.width, scroller) }
+                        .onDisappear { stopWatchingWheel() }
                         .onChange(of: shelf.items.first?.id) { _, newest in
                             firstVisible = 0
                             guard let newest else { return }
@@ -91,6 +95,60 @@ struct ShelfPane: View {
     @State private var firstVisible = 0
 
     private enum Direction { case back, forward }
+
+    /// Pixels of wheel travel still owed a step. A notch of a mouse wheel is
+    /// worth a card; a trackpad sends far smaller deltas far more often, and
+    /// they add up to the same thing.
+    @State private var wheelTravel: CGFloat = 0
+    @State private var wheelMonitor: Any?
+    private static let wheelPerCard: CGFloat = 26
+
+    /// Scrolling with a plain wheel.
+    ///
+    /// The strip runs sideways and a mouse wheel only turns one way, so the
+    /// vertical travel is spent on it — the way a horizontal list is scrolled
+    /// everywhere else on the Mac. Watched through a local event monitor
+    /// rather than a view: the panel never becomes the active app, so the
+    /// events arrive at the window without any view of ours being first in
+    /// line for them.
+    ///
+    /// Only while the pointer is actually over the strip, which the hover
+    /// tracking above already knows. Everywhere else the event is handed back
+    /// untouched, so scrolling elsewhere in the panel — or in the window
+    /// underneath — is unaffected.
+    private func watchWheel(in width: CGFloat, _ scroller: ScrollViewProxy) {
+        stopWatchingWheel()
+        wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            guard hoverPoint != nil else { return event }
+            let travel = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
+                ? event.scrollingDeltaX
+                : event.scrollingDeltaY
+            guard travel != 0 else { return event }
+
+            wheelTravel += travel
+            let steps = Int(wheelTravel / Self.wheelPerCard)
+            guard steps != 0 else { return nil }
+            wheelTravel -= CGFloat(steps) * Self.wheelPerCard
+
+            let visible = max(Int(width / Self.cardStride), 1)
+            let last = max(shelf.items.count - visible, 0)
+            // Scrolling down and away from the user moves the strip forward,
+            // which is how the trackpad's own sideways gesture reads.
+            let target = min(max(firstVisible - steps, 0), last)
+            guard target != firstVisible, shelf.items.indices.contains(target) else { return nil }
+            firstVisible = target
+            withAnimation(Theme.contentAnimation) {
+                scroller.scrollTo(shelf.items[target].id, anchor: .leading)
+            }
+            return nil
+        }
+    }
+
+    private func stopWatchingWheel() {
+        if let wheelMonitor { NSEvent.removeMonitor(wheelMonitor) }
+        wheelMonitor = nil
+        wheelTravel = 0
+    }
 
     /// Arrows for the strip, and nothing else if the cards already fit.
     ///
