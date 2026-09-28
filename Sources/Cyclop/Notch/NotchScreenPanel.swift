@@ -200,7 +200,7 @@ final class NotchScreenPanel {
             }
             .store(in: &cancellables)
 
-        // The focus notice widens the folded notch for three seconds, and
+        // The focus notice widens the folded notch for five seconds, and
         // its close button has to be clickable for exactly that long. Open,
         // the panel's own rect already covers where the notice is drawn.
         vm.focus.alert.$current

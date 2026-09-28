@@ -301,9 +301,11 @@ struct NotchGeometry {
     var collapsedSize: CGSize { CGSize(width: notchSize.width, height: collapsedDepth) }
 
     /// How far the end-of-sprint notice reaches out on each side of the notch.
-    static let alertWing: CGFloat = 104
+    /// Fits "Back to work", the longer of the two labels: at 104 it was cut
+    /// to "Back to wo…".
+    static let alertWing: CGFloat = 128
 
-    /// The notch grown sideways for the three seconds of that notice: as deep
+    /// The notch grown sideways for the five seconds of that notice: as deep
     /// as the notch, wide enough for a word on the left and a close button on
     /// the right.
     var alertSize: CGSize {
