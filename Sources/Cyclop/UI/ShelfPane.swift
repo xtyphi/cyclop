@@ -96,12 +96,16 @@ struct ShelfPane: View {
 
     private enum Direction { case back, forward }
 
-    /// Pixels of wheel travel still owed a step. A notch of a mouse wheel is
-    /// worth a card; a trackpad sends far smaller deltas far more often, and
-    /// they add up to the same thing.
+    /// Wheel travel still owed a step.
     @State private var wheelTravel: CGFloat = 0
     @State private var wheelMonitor: Any?
-    private static let wheelPerCard: CGFloat = 26
+    /// How much travel one card costs, and the two devices do not report in
+    /// the same units. A trackpad and a precise mouse send pixels, dozens of
+    /// them per flick; a plain wheel sends notches, around one per click. One
+    /// threshold for both made the strip fly past everything under a finger
+    /// and crawl under a wheel.
+    private static let pixelsPerCard: CGFloat = 90
+    private static let notchesPerCard: CGFloat = 1
 
     /// Scrolling with a plain wheel.
     ///
@@ -120,15 +124,21 @@ struct ShelfPane: View {
         stopWatchingWheel()
         wheelMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
             guard hoverPoint != nil else { return event }
+            // A flick of the finger keeps sending events after the finger has
+            // gone. Those are the ones that turn one gesture into a sprint to
+            // the end of the shelf, so the strip takes the gesture and leaves
+            // the coasting.
+            guard event.momentumPhase == [] else { return nil }
             let travel = abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY)
                 ? event.scrollingDeltaX
                 : event.scrollingDeltaY
             guard travel != 0 else { return event }
 
+            let perCard = event.hasPreciseScrollingDeltas ? Self.pixelsPerCard : Self.notchesPerCard
             wheelTravel += travel
-            let steps = Int(wheelTravel / Self.wheelPerCard)
+            let steps = Int(wheelTravel / perCard)
             guard steps != 0 else { return nil }
-            wheelTravel -= CGFloat(steps) * Self.wheelPerCard
+            wheelTravel -= CGFloat(steps) * perCard
 
             let visible = max(Int(width / Self.cardStride), 1)
             let last = max(shelf.items.count - visible, 0)
