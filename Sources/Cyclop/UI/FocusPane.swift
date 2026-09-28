@@ -15,8 +15,12 @@ struct FocusPane: View {
                     .font(.system(size: 10.5, weight: .medium).monospacedDigit())
                     .foregroundStyle(Theme.tertiary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // Wide enough for the three buttons of a running sprint, so the
+            // group keeps its width — and its place — when Start becomes them.
+            .frame(width: 250, alignment: .leading)
         }
+        // The dial and the controls travel as one group, centred in the pane
+        // rather than pinned to the rail beside it.
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .onAppear { timer.refreshDay() }
     }
