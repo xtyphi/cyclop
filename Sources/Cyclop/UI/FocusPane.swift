@@ -246,12 +246,12 @@ private struct WeekStrip: View {
         return VStack(spacing: 3) {
             // One line, as wide as the square: left to itself the label was
             // offered less than its own width and broke "Thu" into a column.
-            Text(Self.symbols[(weekday - 1) % 7])
+            Text("\(Self.symbols[(weekday - 1) % 7]) \(calendar.component(.day, from: day))")
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(isToday ? Theme.secondary : Theme.tertiary)
                 .lineLimit(1)
                 .fixedSize()
-                .frame(width: 28)
+                .frame(width: 34)
             RoundedRectangle(cornerRadius: 5, style: .continuous)
                 .fill(isFuture ? Color.white.opacity(0.07) : Self.shade(count))
                 .overlay(
@@ -265,7 +265,7 @@ private struct WeekStrip: View {
                             .foregroundStyle(count >= 3 ? Color.black.opacity(0.8) : Color.white.opacity(0.9))
                     }
                 }
-                .frame(width: 28, height: 22)
+                .frame(width: 34, height: 22)
         }
     }
 
