@@ -43,7 +43,7 @@ final class FocusAlert: ObservableObject {
         // A copy: `NSSound(named:)` hands out one shared instance, and a
         // shared sound is one somebody else's `stop` could cut. The same
         // chime for both ends: the notch says which one it was.
-        let sound = NSSound(named: "Hero")?.copy() as? NSSound
+        let sound = NSSound(named: "Blow")?.copy() as? NSSound
         sound?.play()
         self.sound = sound
         current = kind
