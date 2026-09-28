@@ -19,8 +19,8 @@ struct FocusPane: View {
         HStack(spacing: 22) {
             dial
             VStack(alignment: .leading, spacing: 12) {
-                presets
                 controls
+                presets
                 Text(localized("Sprints today: %d", timer.completedToday))
                     .font(.system(size: 10.5, weight: .medium).monospacedDigit())
                     .foregroundStyle(Theme.tertiary)
@@ -244,17 +244,19 @@ private struct WeekStrip: View {
         let isFuture = !isToday && day > Date()
         let weekday = calendar.component(.weekday, from: day)
         return VStack(spacing: 3) {
+            // One line, as wide as the square: left to itself the label was
+            // offered less than its own width and broke "Thu" into a column.
             Text(Self.symbols[(weekday - 1) % 7])
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(isToday ? Theme.secondary : Theme.tertiary)
+                .lineLimit(1)
+                .fixedSize()
+                .frame(width: 28)
             RoundedRectangle(cornerRadius: 5, style: .continuous)
-                .fill(isFuture ? Color.clear : Self.shade(count))
+                .fill(isFuture ? Color.white.opacity(0.07) : Self.shade(count))
                 .overlay(
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .strokeBorder(
-                            isToday ? Color.white.opacity(0.7) : (isFuture ? Theme.hairline : .clear),
-                            lineWidth: 1
-                        )
+                        .strokeBorder(isToday ? Color.white.opacity(0.7) : .clear, lineWidth: 1)
                 )
                 .overlay {
                     if count > 0 {
@@ -270,7 +272,7 @@ private struct WeekStrip: View {
     /// GitHub's dark-theme contribution greens.
     private static func shade(_ count: Int) -> Color {
         switch count {
-        case ..<1: return Theme.surface
+        case ..<1: return Color.white.opacity(0.14)
         case 1: return Color(red: 0.055, green: 0.267, blue: 0.161)
         case 2: return Color(red: 0.0, green: 0.427, blue: 0.196)
         case 3: return Color(red: 0.149, green: 0.651, blue: 0.255)
