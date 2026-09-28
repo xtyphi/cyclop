@@ -15,9 +15,10 @@ struct FocusPane: View {
                     .font(.system(size: 10.5, weight: .medium).monospacedDigit())
                     .foregroundStyle(Theme.tertiary)
             }
-            // Wide enough for the three buttons of a running sprint, so the
-            // group keeps its width — and its place — when Start becomes them.
-            .frame(width: 250, alignment: .leading)
+            // Wide enough for the longest row — Resume and two icons, 173 pt
+            // in Russian — so the group keeps its width, and its place, when
+            // Start turns into them.
+            .frame(width: 210, alignment: .leading)
         }
         // The dial and the controls travel as one group, centred in the pane
         // rather than pinned to the rail beside it.
@@ -115,13 +116,29 @@ struct FocusPane: View {
                 } else {
                     pill(localized("Pause"), symbol: "pause.fill", prominent: true) { timer.pause() }
                 }
-                pill(
+                // The secondary two as icons, named on hover. Spelled out,
+                // the running row reached 335 pt in Russian — the whole pane,
+                // with nothing left to centre the group in.
+                icon(
                     timer.phase == .work ? localized("Finish") : localized("Skip Break"),
                     symbol: "forward.end.fill"
                 ) { timer.skip() }
-                pill(localized("Stop"), symbol: "stop.fill") { timer.reset() }
+                icon(localized("Stop"), symbol: "stop.fill") { timer.reset() }
             }
         }
+    }
+
+    private func icon(_ title: String, symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(Circle().fill(Theme.surfaceHover))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(title)
     }
 
     private func pill(
