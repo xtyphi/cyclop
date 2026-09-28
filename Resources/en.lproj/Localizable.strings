@@ -149,3 +149,17 @@
 
 "Player" = "Player";
 "Open %@" = "Open %@";
+
+/* Focus tab */
+"Focus" = "Focus";
+"Work" = "Work";
+"Break" = "Break";
+"Ready" = "Ready";
+"Paused" = "Paused";
+"Start" = "Start";
+"Pause" = "Pause";
+"Resume" = "Resume";
+"Finish" = "Finish";
+"Skip Break" = "Skip Break";
+"Stop" = "Stop";
+"Sprints today: %d" = "Sprints today: %d";

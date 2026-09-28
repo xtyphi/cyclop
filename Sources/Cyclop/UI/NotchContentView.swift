@@ -106,6 +106,8 @@ struct NotchContentView: View {
             EmptyView()
         case .system:
             EmptyView()
+        case .focus:
+            FocusCounter(timer: vm.focus)
         case .notes:
             NotesCounter(notes: vm.notes)
         case .teleprompter:
@@ -179,6 +181,8 @@ struct NotchContentView: View {
             LimitsPane(limits: vm.limits)
         case .system:
             SystemPane(load: vm.load)
+        case .focus:
+            FocusPane(timer: vm.focus)
         case .notes:
             NotesPane(notes: vm.notes, privacy: vm.privacy, wantsKeyboard: $panel.wantsKeyboard)
         case .teleprompter:
@@ -295,5 +299,20 @@ private struct Rail: View {
     private func fill(for tab: NotchViewModel.Tab) -> Color {
         if vm.tab == tab { return Theme.surfaceHover }
         return hovered == tab ? Theme.surface : .clear
+    }
+}
+
+/// Sprints done today, beside the tab name. Watches the timer directly: the
+/// view model does not forward its changes, so the header would otherwise
+/// show the count from whenever something else last redrew it.
+private struct FocusCounter: View {
+    @ObservedObject var timer: FocusTimer
+
+    var body: some View {
+        if timer.completedToday > 0 {
+            Text("\(timer.completedToday)")
+                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .foregroundStyle(Theme.tertiary)
+        }
     }
 }
