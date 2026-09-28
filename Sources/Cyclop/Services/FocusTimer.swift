@@ -40,11 +40,18 @@ final class FocusTimer: ObservableObject {
     @Published private(set) var endsAt: Date?
     /// What was left when paused. Nil unless paused.
     @Published private(set) var pausedRemaining: TimeInterval?
-    @Published private(set) var completedToday = 0
+    /// Sprints finished, by day. Kept rather than a single counter for
+    /// today, so the pane can show the week and page back through the ones
+    /// before it.
+    @Published private(set) var history: [String: Int] = [:]
     /// Clock for the pane, advanced only while the pane is on screen.
     @Published private(set) var now = Date()
 
+    /// The end-of-phase notice: chime, paused music, the notch.
+    let alert = FocusAlert()
+
     var preset: Preset { Self.presets[presetIndex] }
+    var completedToday: Int { sprints(on: Date()) }
     var isPaused: Bool { pausedRemaining != nil }
 
     var remaining: TimeInterval {
@@ -63,7 +70,6 @@ final class FocusTimer: ObservableObject {
 
     private var deadline: Timer?
     private var ticker: Timer?
-    private var countedDay = ""
 
     // MARK: - Lifecycle
 
@@ -79,6 +85,7 @@ final class FocusTimer: ObservableObject {
         deadline?.invalidate()
         deadline = nil
         setActive(false)
+        alert.dismiss()
     }
 
     /// The pane's own clock. The phase change does not depend on it — that
@@ -121,11 +128,11 @@ final class FocusTimer: ObservableObject {
     }
 
     /// Ends the running phase now, as if its time had run out — a sprint
-    /// finished early still counts, still earns its break, and still gets
-    /// the chime that says the break has begun.
+    /// finished early still counts, and still earns its break. No notice: the
+    /// click came from the panel, so whoever made it is already looking.
     func skip() {
         guard phase != .idle else { return }
-        finishPhase(at: Date(), announce: true)
+        finishPhase(at: Date(), announce: false)
     }
 
     /// Back to idle without counting anything.
@@ -173,10 +180,10 @@ final class FocusTimer: ObservableObject {
         case .work:
             countSprint(finishedAt: moment)
             enter(.rest, length: phaseLength(.rest), from: moment)
-            if announce { NSSound(named: "Glass")?.play() }
+            if announce { alert.fire(.sprintEnded) }
         case .rest:
             enter(.idle, length: 0)
-            if announce { NSSound(named: "Hero")?.play() }
+            if announce { alert.fire(.breakEnded) }
         case .idle:
             break
         }
@@ -212,30 +219,41 @@ final class FocusTimer: ObservableObject {
         }
     }
 
-    // MARK: - Today
+    // MARK: - History
 
-    private static func dayKey(_ date: Date) -> String {
+    /// Also the format the single-day counter was saved under before there
+    /// was a history, so an old record migrates by key as it is.
+    static func dayKey(_ date: Date) -> String {
         let parts = Calendar.current.dateComponents([.year, .month, .day], from: date)
         return "\(parts.year ?? 0)-\(parts.month ?? 0)-\(parts.day ?? 0)"
     }
 
-    private func countSprint(finishedAt moment: Date) {
-        let day = Self.dayKey(moment)
-        if day != countedDay {
-            countedDay = day
-            completedToday = 0
-        }
-        completedToday += 1
+    private static func date(fromKey key: String) -> Date? {
+        let parts = key.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return nil }
+        return Calendar.current.date(from: DateComponents(year: parts[0], month: parts[1], day: parts[2]))
     }
 
-    /// Yesterday's count is not today's. Checked when the pane is looked at,
-    /// which is the only time the number is read.
-    func refreshDay() {
-        let today = Self.dayKey(Date())
-        guard today != countedDay else { return }
-        countedDay = today
-        completedToday = 0
-        save()
+    func sprints(on date: Date) -> Int {
+        history[Self.dayKey(date)] ?? 0
+    }
+
+    /// The first day anything was counted, which is as far back as paging
+    /// through the weeks is worth going.
+    var firstRecordedDay: Date? {
+        history.keys.compactMap(Self.date(fromKey:)).min()
+    }
+
+    /// How long a day is kept: a year and a little, enough to page back
+    /// through, and a bound on a record written on every change.
+    private static let keptDays = 400
+
+    private func countSprint(finishedAt moment: Date) {
+        history[Self.dayKey(moment), default: 0] += 1
+        guard let cutoff = Calendar.current.date(byAdding: .day, value: -Self.keptDays, to: moment) else { return }
+        history = history.filter { key, _ in
+            Self.date(fromKey: key).map { $0 >= cutoff } ?? false
+        }
     }
 
     // MARK: - Persistence
@@ -246,8 +264,7 @@ final class FocusTimer: ObservableObject {
         var record: [String: Any] = [
             "phase": phase.rawValue,
             "preset": presetIndex,
-            "completed": completedToday,
-            "day": countedDay,
+            "history": history,
         ]
         if let endsAt { record["endsAt"] = endsAt.timeIntervalSince1970 }
         if let pausedRemaining { record["paused"] = pausedRemaining }
@@ -259,8 +276,12 @@ final class FocusTimer: ObservableObject {
         if let index = record["preset"] as? Int, Self.presets.indices.contains(index) {
             presetIndex = index
         }
-        countedDay = record["day"] as? String ?? ""
-        completedToday = record["completed"] as? Int ?? 0
+        if let saved = record["history"] as? [String: Int] {
+            history = saved
+        } else if let day = record["day"] as? String, let count = record["completed"] as? Int, count > 0 {
+            // Written before there was a history: one day and its count.
+            history = [day: count]
+        }
         let restored = (record["phase"] as? String).flatMap(Phase.init(rawValue:)) ?? .idle
         let end = (record["endsAt"] as? Double).map { Date(timeIntervalSince1970: $0) }
         let paused = record["paused"] as? Double
@@ -274,6 +295,5 @@ final class FocusTimer: ObservableObject {
             phase = .idle
         }
         now = Date()
-        refreshDay()
     }
 }

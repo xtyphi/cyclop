@@ -302,6 +302,14 @@ final class NotchViewModel: ObservableObject {
         self.notes = NoteStore()
         self.teleprompter = TeleprompterStore()
 
+        // Only a player that is running is asked: with the Player tab off,
+        // the feed is stopped and nothing it says about playback is current.
+        focus.alert.pauseMedia = { [weak self] in
+            guard let self, isVisible(.media) else { return false }
+            return media.pauseIfPlaying()
+        }
+        focus.alert.resumeMedia = { [weak self] in self?.media.resumeIfPaused() }
+
         // The panel header reads through to the stores — counters, the source
         // name, the equalizer. Nested ObservableObjects do not propagate on
         // their own, so those would only refresh when something else happened

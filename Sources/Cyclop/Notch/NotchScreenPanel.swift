@@ -92,7 +92,7 @@ final class NotchScreenPanel {
         let root = NotchRootView(frame: CGRect(origin: .zero, size: geometry.windowSize))
         root.autoresizingMask = [.width, .height]
 
-        let hosting = NSHostingView(rootView: NotchContentView(vm: vm, panel: state))
+        let hosting = NSHostingView(rootView: NotchContentView(vm: vm, panel: state, alert: vm.focus.alert))
         hosting.frame = root.bounds
         hosting.autoresizingMask = [.width, .height]
         if #available(macOS 14.0, *) {
@@ -127,7 +127,10 @@ final class NotchScreenPanel {
         // Clicking away drops the keyboard but leaves the tab where it was, so
         // a click back into the panel has to be able to ask for it again.
         panel.onPress = { [weak self] in
-            guard let self, vm.clickTakesKeyboard else { return }
+            // A click on the folded notch can only be a click on the focus
+            // notice: it closes the notice, and must not open a typing tab.
+            guard let self, state.isOpen || vm.focus.alert.current == nil else { return }
+            guard vm.clickTakesKeyboard else { return }
             state.wantsKeyboard = true
         }
 
@@ -193,6 +196,23 @@ final class NotchScreenPanel {
                     // A pass later: `openBodySize` reads `tab`, and this fires
                     // while the property is still being set.
                     DispatchQueue.main.async { self.refreshOpenRects() }
+                }
+            }
+            .store(in: &cancellables)
+
+        // The focus notice widens the folded notch for three seconds, and
+        // its close button has to be clickable for exactly that long. Open,
+        // the panel's own rect already covers where the notice is drawn.
+        vm.focus.alert.$current
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    // A pass later, for the same reason as the tab: this
+                    // fires while the value is still being set.
+                    DispatchQueue.main.async {
+                        guard let self, !self.state.isOpen else { return }
+                        self.applyActiveRect(open: false)
+                    }
                 }
             }
             .store(in: &cancellables)
@@ -356,7 +376,8 @@ final class NotchScreenPanel {
         // The open size is the current tab's, not a constant: the teleprompter
         // is taller, and a rect cut for 208 would leave the bottom half of it
         // visible but untouchable.
-        let size = open ? state.openBodySize : geometry.collapsedSize
+        let folded = vm.focus.alert.current == nil ? geometry.collapsedSize : geometry.alertSize
+        let size = open ? state.openBodySize : folded
         var rect = geometry.contentRect(for: size)
         if open {
             // Slack so the concave shoulders stay grabbable. Never while

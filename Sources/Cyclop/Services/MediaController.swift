@@ -94,6 +94,21 @@ final class MediaController: ObservableObject {
         dispatch(feed: isPlaying ? .play : .pause, script: { PlayerBridge.playPause($0) }, key: .playPause)
     }
 
+    /// For the focus chime: stops what is playing and says whether it did,
+    /// so that only music it stopped is started again afterwards.
+    func pauseIfPlaying() -> Bool {
+        guard track != nil, isPlaying else { return false }
+        togglePlayPause()
+        return true
+    }
+
+    /// The other half. Skipped if something already started it again in the
+    /// meantime — the user, or the player itself.
+    func resumeIfPaused() {
+        guard track != nil, !isPlaying else { return }
+        togglePlayPause()
+    }
+
     func next() {
         dispatch(feed: .next, script: { PlayerBridge.next($0) }, key: .next)
     }

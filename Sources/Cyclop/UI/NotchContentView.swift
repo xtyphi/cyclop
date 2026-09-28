@@ -5,9 +5,14 @@ struct NotchContentView: View {
     /// This screen's share of the panel. Everything the pointer decides is
     /// here; everything shown is in `vm`, the same on every display.
     @ObservedObject var panel: PanelState
+    /// Watched on its own, like the counters below: the view model does not
+    /// forward the timer, and the notice has to appear with the panel folded.
+    @ObservedObject var alert: FocusAlert
 
     private var isOpen: Bool { panel.isActive }
-    private var size: CGSize { panel.bodySize }
+    /// The folded notch grown sideways for the end-of-sprint notice.
+    private var showsNotice: Bool { !isOpen && alert.current != nil }
+    private var size: CGSize { showsNotice ? panel.geometry.alertSize : panel.bodySize }
     private var topRadius: CGFloat { isOpen ? Theme.openTopRadius : Theme.collapsedTopRadius }
 
     var body: some View {
@@ -21,7 +26,7 @@ struct NotchContentView: View {
             // A synthetic notch has content underneath it — a full-screen app on
             // an external display — so at rest it is drawn transparent and only
             // turns black once the panel opens.
-            .fill(Color.black.opacity(isOpen || panel.geometry.isPhysical ? 1 : 0))
+            .fill(Color.black.opacity(isOpen || showsNotice || panel.geometry.isPhysical ? 1 : 0))
             .frame(width: size.width + 2 * topRadius, height: size.height)
             .shadow(color: .black.opacity(isOpen ? 0.5 : 0), radius: 18, y: 8)
 
@@ -30,6 +35,16 @@ struct NotchContentView: View {
                 if isOpen {
                     content
                         .transition(.opacity)
+                        // Open, the notice floats over the top of the pane
+                        // rather than in the header strip, which is kept free
+                        // of anything clickable (see below).
+                        .overlay(alignment: .top) {
+                            if let kind = alert.current {
+                                FocusNotice(kind: kind, dismiss: alert.dismiss)
+                                    .padding(.top, 4)
+                                    .transition(.opacity)
+                            }
+                        }
                 }
             }
             .frame(width: size.width, height: size.height, alignment: .top)
@@ -38,6 +53,7 @@ struct NotchContentView: View {
         .frame(width: size.width + 2 * topRadius, height: size.height, alignment: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(Theme.openAnimation, value: isOpen)
+        .animation(Theme.openAnimation, value: alert.current)
         .animation(Theme.paneAnimation, value: vm.tab)
     }
 
@@ -51,6 +67,15 @@ struct NotchContentView: View {
 
     private var header: some View {
         HStack(spacing: 0) {
+            // The one exception to the rule above, and only folded, for three
+            // seconds: the notice needs a close button, and the notch is where
+            // it is looked for.
+            if showsNotice, let kind = alert.current {
+                FocusNotice.Label(kind: kind)
+                    .padding(.leading, 12)
+                    .frame(width: NotchGeometry.alertWing, alignment: .leading)
+                    .transition(.opacity)
+            }
             if isOpen {
                 Text(vm.tab.title.uppercased())
                     .font(.system(size: 9, weight: .semibold))
@@ -66,6 +91,12 @@ struct NotchContentView: View {
             if isOpen {
                 trailing
                     .padding(.trailing, 16)
+                    .transition(.opacity)
+            }
+            if showsNotice {
+                FocusNotice.CloseButton(dismiss: alert.dismiss)
+                    .padding(.trailing, 10)
+                    .frame(width: NotchGeometry.alertWing, alignment: .trailing)
                     .transition(.opacity)
             }
         }
@@ -313,6 +344,67 @@ private struct FocusCounter: View {
             Text("\(timer.completedToday)")
                 .font(.system(size: 10, weight: .medium).monospacedDigit())
                 .foregroundStyle(Theme.tertiary)
+        }
+    }
+}
+
+/// What the end of a sprint or a break looks like in the notch. Folded, the
+/// label and the close button sit on either side of the notch; open, the two
+/// come together in a capsule over the pane.
+private struct FocusNotice: View {
+    let kind: FocusAlert.Kind
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Label(kind: kind)
+            CloseButton(dismiss: dismiss)
+        }
+        .padding(.leading, 12)
+        .padding(.trailing, 4)
+        .frame(height: 30)
+        .background(Capsule().fill(Color(white: 0.16)))
+        .shadow(color: .black.opacity(0.5), radius: 8, y: 3)
+    }
+
+    struct Label: View {
+        let kind: FocusAlert.Kind
+
+        var body: some View {
+            HStack(spacing: 6) {
+                Image(systemName: kind == .sprintEnded ? "cup.and.saucer.fill" : "timer")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(color)
+                Text(kind == .sprintEnded ? localized("Break") : localized("Back to work"))
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+            }
+        }
+
+        /// The colours of the phase being entered, as on the timer's dial.
+        private var color: Color {
+            kind == .sprintEnded
+                ? Color(red: 0.30, green: 0.80, blue: 0.55)
+                : Color(red: 1.0, green: 0.55, blue: 0.25)
+        }
+    }
+
+    /// Silences the chime and closes the notice in one press.
+    struct CloseButton: View {
+        let dismiss: () -> Void
+
+        var body: some View {
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(Theme.surfaceHover))
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .help(localized("Dismiss"))
         }
     }
 }

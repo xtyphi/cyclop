@@ -300,6 +300,16 @@ struct NotchGeometry {
     /// Size of the collapsed target: the notch itself, or the strip above.
     var collapsedSize: CGSize { CGSize(width: notchSize.width, height: collapsedDepth) }
 
+    /// How far the end-of-sprint notice reaches out on each side of the notch.
+    static let alertWing: CGFloat = 104
+
+    /// The notch grown sideways for the three seconds of that notice: as deep
+    /// as the notch, wide enough for a word on the left and a close button on
+    /// the right.
+    var alertSize: CGSize {
+        CGSize(width: notchSize.width + 2 * Self.alertWing, height: notchSize.height)
+    }
+
     /// Hover target while collapsed, in global screen coordinates. Slightly
     /// taller than the notch so the panel opens just before the pointer lands.
     var hoverRect: CGRect {
