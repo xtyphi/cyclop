@@ -146,6 +146,10 @@ final class LimitsStore: ObservableObject {
     private enum ClaudeResult: Sendable {
         case data(Data)
         case signedOut
+        /// The sign-in itself has run out, not just the hour-long token: the
+        /// refresh token is past its date, and no amount of using Claude Code
+        /// renews it. Only a fresh `/login` does.
+        case loggedOut
         case rateLimited(retryAfter: TimeInterval?)
         case failed
     }
@@ -176,6 +180,8 @@ final class LimitsStore: ObservableObject {
             }
         case .signedOut:
             claudeFromAPI.failure = localized("Open Claude Code to renew sign-in")
+        case .loggedOut:
+            claudeFromAPI.failure = localized("Sign in again: run claude in Terminal, then /login")
         case .rateLimited(let retryAfter):
             claudeBackoff = min(max(claudeBackoff * 2, claudeInterval), 30 * 60)
             let wait = max(retryAfter ?? 0, claudeBackoff)
@@ -194,6 +200,7 @@ final class LimitsStore: ObservableObject {
         switch await readClaudeToken() {
         case .token(let value): token = value
         case .missing: return .signedOut
+        case .loggedOut: return .loggedOut
         case .unavailable: return .failed
         }
         var request = URLRequest(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!)
@@ -218,6 +225,10 @@ final class LimitsStore: ObservableObject {
     private enum TokenRead: Sendable {
         case token(String)
         case missing
+        /// Claude Code in the Terminal is signed out. The Code tab of the
+        /// desktop app signs in on its own and never writes here, so having
+        /// that open does not bring this back.
+        case loggedOut
         case unavailable
     }
 
@@ -247,9 +258,12 @@ final class LimitsStore: ObservableObject {
         guard task.terminationReason == .exit, task.terminationStatus == 0,
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return .unavailable }
-        guard let oauth = root["claudeAiOauth"] as? [String: Any],
-              let token = oauth["accessToken"] as? String, !token.isEmpty
-        else { return .missing }
+        guard let oauth = root["claudeAiOauth"] as? [String: Any] else { return .missing }
+        if let refreshExpires = (oauth["refreshTokenExpiresAt"] as? NSNumber)?.doubleValue,
+           Date(timeIntervalSince1970: refreshExpires / 1000) < Date() {
+            return .loggedOut
+        }
+        guard let token = oauth["accessToken"] as? String, !token.isEmpty else { return .missing }
         if let expires = (oauth["expiresAt"] as? NSNumber)?.doubleValue,
            Date(timeIntervalSince1970: expires / 1000) < Date().addingTimeInterval(60) {
             return .missing
