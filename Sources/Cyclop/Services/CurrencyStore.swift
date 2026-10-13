@@ -248,6 +248,9 @@ final class CurrencyStore: ObservableObject {
             }
         }
         guard let best else { throw lastError ?? URLError(.cannotConnectToHost) }
+        // The source was changed while this was in flight: a newer request
+        // for the new one is on its way, and this table belongs to nobody.
+        guard code == sourceCode.lowercased() else { return }
         rates = best.table
         rateBase = code
         rateDate = best.date
@@ -265,6 +268,9 @@ final class CurrencyStore: ObservableObject {
                 parsed[key.lowercased()] = number.doubleValue
             }
         }
+        // A file without its own table converts nothing. Refused here, so a
+        // newer date on an empty answer cannot push out a usable table.
+        guard parsed.count > 1 else { throw URLError(.cannotParseResponse) }
         return (date, parsed)
     }
 
