@@ -104,6 +104,7 @@ final class ClipboardStore: ObservableObject {
     private let limit = 1000
     private static let file = Support.file("clipboard.json")
     private let saves = DebouncedWrite(after: 1.0)
+    private var lastPrune = Date.distantPast
 
     init() {
         load()
@@ -173,6 +174,12 @@ final class ClipboardStore: ObservableObject {
     }
 
     private func poll() {
+        // Hourly rather than only on a copy: a quiet week must still let
+        // the old ones go, from the file as well as from the list.
+        if Date().timeIntervalSince(lastPrune) > 3600 {
+            lastPrune = Date()
+            prune()
+        }
         let pasteboard = NSPasteboard.general
         guard pasteboard.changeCount != lastChangeCount else { return }
         lastChangeCount = pasteboard.changeCount
@@ -283,6 +290,8 @@ final class ClipboardStore: ObservableObject {
         else { return }
         let cutoff = Date().addingTimeInterval(-Self.retention)
         items = Array(records.compactMap(\.item).filter { $0.date >= cutoff }.prefix(limit))
+        // What was left behind goes from the file too, not only from view.
+        if items.count != records.count { scheduleSave() }
     }
 
     private func scheduleSave() {
