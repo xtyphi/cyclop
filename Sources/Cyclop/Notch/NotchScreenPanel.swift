@@ -360,6 +360,15 @@ final class NotchScreenPanel {
             // through a region the animation has not covered yet.
             applyActiveRect(open: true)
             withAnimation(Theme.openAnimation) { state.isOpen = true }
+            // The history is opened to search it, by hover as much as by the
+            // shortcut, so it takes the caret on arrival. A pass later: this
+            // runs inside the open that the keyboard request would start.
+            if vm.tab == .clipboard {
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, state.isOpen, vm.tab == .clipboard else { return }
+                    state.wantsKeyboard = true
+                }
+            }
         } else {
             // The keyboard goes first and the fold goes second — one run-loop
             // pass apart, never together. Dropped in the same pass, resigning

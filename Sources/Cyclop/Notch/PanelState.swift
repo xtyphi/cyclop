@@ -49,7 +49,11 @@ final class PanelState: ObservableObject {
     /// teleprompter — it is a countdown. The extra height buys the paragraph
     /// the reader needs to see coming.
     var openBodySize: CGSize {
-        vm.tab == .teleprompter ? geometry.tallExpandedSize : geometry.expandedSize
+        switch vm.tab {
+        case .teleprompter: return geometry.tallExpandedSize
+        case .clipboard: return geometry.clipboardExpandedSize
+        default: return geometry.expandedSize
+        }
     }
 
     /// Size of the visible body for the current state.

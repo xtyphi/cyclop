@@ -58,8 +58,21 @@ struct ClipboardPane: View {
             }
         }
         .padding(.top, 2)
-        .onChange(of: wantsKeyboard) { _, wants in searchFocused = wants }
-        .onAppear { if wantsKeyboard { searchFocused = true } }
+        // Asked again a moment later, not only on the spot: the pane is
+        // still being inserted when the panel opens, and a focus request
+        // that lands before the field is in the window is dropped silently.
+        // That is what left the caret out of the search after ⌥⇧C.
+        .task(id: wantsKeyboard) {
+            guard wantsKeyboard else {
+                searchFocused = false
+                return
+            }
+            for delay in [0, 60, 250] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                guard !Task.isCancelled, wantsKeyboard else { return }
+                searchFocused = true
+            }
+        }
         .animation(Theme.contentAnimation, value: browser.previewing)
     }
 

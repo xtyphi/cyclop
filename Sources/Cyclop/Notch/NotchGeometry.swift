@@ -52,10 +52,19 @@ struct NotchGeometry {
     var tallExpandedSize: CGSize {
         CGSize(width: expandedSize.width, height: Self.tallBodyHeight)
     }
+    /// Body for the clipboard history: a third of the screen down, so a week
+    /// of copies shows more than six lines at a time. Same width as the rest,
+    /// for the same reason as the teleprompter.
+    var clipboardExpandedSize: CGSize {
+        CGSize(width: expandedSize.width, height: max(expandedSize.height, (screen.frame.height / 3).rounded()))
+    }
+
     /// Tallest body any tab can ask for. The window is cut to this once and
     /// never resized: it is transparent outside the visible panel, and what is
     /// clickable is decided separately by the active rect.
-    var maxBodyHeight: CGFloat { max(expandedSize.height, Self.tallBodyHeight) }
+    var maxBodyHeight: CGFloat {
+        max(expandedSize.height, Self.tallBodyHeight, clipboardExpandedSize.height)
+    }
 
     /// What the body has left for content on an ordinary tab, once the header
     /// and the padding beneath are taken out.
