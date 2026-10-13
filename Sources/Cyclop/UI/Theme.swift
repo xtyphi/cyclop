@@ -35,9 +35,12 @@ struct NotchButtonStyle: ButtonStyle {
             .background(
                 Circle().fill(prominent ? Theme.surfaceHover : Color.clear)
             )
-            .opacity(configuration.isPressed ? 0.55 : 1)
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .scaleEffect(configuration.isPressed ? 0.9 : 1)
             .contentShape(Circle())
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            // The press lands on the frame the button goes down, unanimated:
+            // easing into it is lag under the pointer. Only the release eases.
+            .animation(configuration.isPressed ? nil : .easeOut(duration: 0.18), value: configuration.isPressed)
     }
 }
 

@@ -124,7 +124,7 @@ struct NotchContentView: View {
         case .calendar:
             if let next = vm.calendar.next {
                 Text(CalendarPane.countdown(to: next, from: vm.calendar.now))
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: 10, weight: .medium).monospacedDigit())
                     .foregroundStyle(next.isRunning ? Color.white.opacity(0.8) : Theme.tertiary)
             }
         case .translate:
