@@ -230,13 +230,7 @@ final class ClipboardStore: ObservableObject {
         // often does, is kept in the history as its text: that is what a
         // search finds and what pasting it back is usually for.
         if let png = pngFromPasteboard(pasteboard) {
-            if wantsImages() { onImage?(png) }
-            if let string = pasteboard.string(forType: .string),
-               !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                record(ClipItem(payload: .text(string), date: Date(), app: Self.frontApp))
-            } else {
-                recordImage(png)
-            }
+            receivedImage(png, from: pasteboard)
             return
         }
         // A copy made on the phone arrives in two parts: macOS puts the
@@ -279,7 +273,7 @@ final class ClipboardStore: ObservableObject {
                 let pasteboard = NSPasteboard.general
                 guard pasteboard.changeCount == changeCount else { return }
                 if let png = self.pngFromPasteboard(pasteboard) {
-                    self.receivedImage(png)
+                    self.receivedImage(png, from: pasteboard)
                     return
                 }
                 self.awaitImage(at: changeCount, attempt: attempt + 1)
@@ -295,9 +289,14 @@ final class ClipboardStore: ObservableObject {
         return rep.representation(using: .png, properties: [:])
     }
 
-    private func receivedImage(_ png: Data) {
+    private func receivedImage(_ png: Data, from pasteboard: NSPasteboard) {
         if wantsImages() { onImage?(png) }
-        recordImage(png)
+        if let string = pasteboard.string(forType: .string),
+           !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            record(ClipItem(payload: .text(string), date: Date(), app: Self.frontApp))
+        } else {
+            recordImage(png)
+        }
     }
 
     /// Named after its content, so a picture copied again lands on the same
@@ -356,7 +355,9 @@ final class ClipboardStore: ObservableObject {
     /// are skipped, the rest of what passes through cannot be told apart.
     private func save() {
         guard let data = try? JSONEncoder().encode(items.map(ClipRecord.init)) else { return }
-        try? data.write(to: Self.file, options: .atomic)
+        // Pictures go only once the list without them is on disk: a failed
+        // write leaves a file that still names them, and so they stay.
+        guard (try? data.write(to: Self.file, options: .atomic)) != nil else { return }
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: Self.file.path)
         sweepImages()
     }
