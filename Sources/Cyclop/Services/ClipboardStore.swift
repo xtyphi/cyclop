@@ -1,9 +1,13 @@
 import AppKit
+import CryptoKit
 
 struct ClipItem: Identifiable, Equatable {
     enum Payload: Equatable {
         case text(String)
         case file(URL)
+        /// A picture kept by the history itself, under a name taken from its
+        /// content — the same screenshot copied twice is one file and one row.
+        case image(URL, CGSize)
     }
 
     var id = UUID()
@@ -18,6 +22,8 @@ struct ClipItem: Identifiable, Equatable {
         switch payload {
         case .text(let string): return string
         case .file(let url): return url.path
+        // Nothing to match a picture against: a search shows text.
+        case .image: return ""
         }
     }
 
@@ -26,6 +32,7 @@ struct ClipItem: Identifiable, Equatable {
         switch payload {
         case .text(let string): return string
         case .file(let url): return url.path
+        case .image(_, let size): return "\(Int(size.width)) × \(Int(size.height))"
         }
     }
 
@@ -35,6 +42,8 @@ struct ClipItem: Identifiable, Equatable {
             return string.trimmingCharacters(in: .whitespacesAndNewlines)
         case .file(let url):
             return url.lastPathComponent
+        case .image(_, let size):
+            return "\(Int(size.width)) × \(Int(size.height))"
         }
     }
 
@@ -45,6 +54,8 @@ struct ClipItem: Identifiable, Equatable {
             return "text.alignleft"
         case .file:
             return "doc"
+        case .image:
+            return "photo"
         }
     }
 
@@ -58,6 +69,8 @@ private struct ClipRecord: Codable {
     var value: String
     var date: Date
     var app: String?
+    var width: Double?
+    var height: Double?
 
     init(_ item: ClipItem) {
         id = item.id
@@ -66,6 +79,9 @@ private struct ClipRecord: Codable {
         switch item.payload {
         case .text(let string): kind = "text"; value = string
         case .file(let url): kind = "file"; value = url.path
+        case .image(let url, let size):
+            kind = "image"; value = url.lastPathComponent
+            width = size.width; height = size.height
         }
     }
 
@@ -73,6 +89,13 @@ private struct ClipRecord: Codable {
         switch kind {
         case "text": return ClipItem(id: id, payload: .text(value), date: date, app: app)
         case "file": return ClipItem(id: id, payload: .file(URL(fileURLWithPath: value)), date: date, app: app)
+        case "image":
+            // Stored by name and resolved against the folder, so the history
+            // survives the folder moving with the app's support directory.
+            let url = ClipboardStore.imageFolder.appendingPathComponent(value)
+            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+            let size = CGSize(width: width ?? 0, height: height ?? 0)
+            return ClipItem(id: id, payload: .image(url, size), date: date, app: app)
         default: return nil
         }
     }
@@ -103,6 +126,8 @@ final class ClipboardStore: ObservableObject {
     /// line: past it the oldest go first.
     private let limit = 1000
     private static let file = Support.file("clipboard.json")
+    /// Where copied pictures are kept for the week, one PNG each.
+    nonisolated static let imageFolder = Support.directory("ClipboardImages")
     private let saves = DebouncedWrite(after: 1.0)
     private var lastPrune = Date.distantPast
 
@@ -163,6 +188,8 @@ final class ClipboardStore: ObservableObject {
             pasteboard.setString(string, forType: .string)
         case .file(let url):
             pasteboard.writeObjects([url as NSURL])
+        case .image(let url, _):
+            if let data = try? Data(contentsOf: url) { pasteboard.setData(data, forType: .png) }
         }
         lastChangeCount = pasteboard.changeCount
         // Freshly used entries bubble to the top.
@@ -197,22 +224,30 @@ final class ClipboardStore: ObservableObject {
             return
         }
 
-        if wantsImages() {
-            if let png = pngFromPasteboard(pasteboard) {
-                onImage?(png)
-                return
+        // Pictures go to the history every time, and to the shelf as well
+        // when that is switched on — two different places with two jobs. A
+        // copy that also carries text, as one from a document or a table
+        // often does, is kept in the history as its text: that is what a
+        // search finds and what pasting it back is usually for.
+        if let png = pngFromPasteboard(pasteboard) {
+            if wantsImages() { onImage?(png) }
+            if let string = pasteboard.string(forType: .string),
+               !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                record(ClipItem(payload: .text(string), date: Date(), app: Self.frontApp))
+            } else {
+                recordImage(png)
             }
-
-            // A copy made on the phone arrives in two parts: macOS puts the
-            // type on the pasteboard the moment the phone announces it, and
-            // the picture itself is still coming over the air. So the counter
-            // can move while there are no bytes to read yet — and reading once
-            // would drop the screenshot for good, because the counter has
-            // already been marked as seen. Wait for it instead.
-            if pasteboard.availableType(from: [.png, .tiff]) != nil {
-                awaitImage(at: pasteboard.changeCount, attempt: 0)
-                return
-            }
+            return
+        }
+        // A copy made on the phone arrives in two parts: macOS puts the
+        // type on the pasteboard the moment the phone announces it, and
+        // the picture itself is still coming over the air. So the counter
+        // can move while there are no bytes to read yet — and reading once
+        // would drop the screenshot for good, because the counter has
+        // already been marked as seen. Wait for it instead.
+        if pasteboard.availableType(from: [.png, .tiff]) != nil {
+            awaitImage(at: pasteboard.changeCount, attempt: 0)
+            return
         }
 
         guard let string = pasteboard.string(forType: .string),
@@ -244,7 +279,7 @@ final class ClipboardStore: ObservableObject {
                 let pasteboard = NSPasteboard.general
                 guard pasteboard.changeCount == changeCount else { return }
                 if let png = self.pngFromPasteboard(pasteboard) {
-                    self.onImage?(png)
+                    self.receivedImage(png)
                     return
                 }
                 self.awaitImage(at: changeCount, attempt: attempt + 1)
@@ -258,6 +293,24 @@ final class ClipboardStore: ObservableObject {
         guard let tiff = pasteboard.data(forType: .tiff),
               let rep = NSBitmapImageRep(data: tiff) else { return nil }
         return rep.representation(using: .png, properties: [:])
+    }
+
+    private func receivedImage(_ png: Data) {
+        if wantsImages() { onImage?(png) }
+        recordImage(png)
+    }
+
+    /// Named after its content, so a picture copied again lands on the same
+    /// file and replaces its old row instead of adding a second one.
+    private func recordImage(_ png: Data) {
+        let name = SHA256.hash(data: png).prefix(12).map { String(format: "%02x", $0) }.joined() + ".png"
+        let url = Self.imageFolder.appendingPathComponent(name)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            guard (try? png.write(to: url, options: .atomic)) != nil else { return }
+            try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        }
+        let size = NSBitmapImageRep(data: png).map { CGSize(width: $0.pixelsWide, height: $0.pixelsHigh) } ?? .zero
+        record(ClipItem(payload: .image(url, size), date: Date(), app: Self.frontApp))
     }
 
     private static var frontApp: String? {
@@ -305,6 +358,21 @@ final class ClipboardStore: ObservableObject {
         guard let data = try? JSONEncoder().encode(items.map(ClipRecord.init)) else { return }
         try? data.write(to: Self.file, options: .atomic)
         try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: Self.file.path)
+        sweepImages()
+    }
+
+    /// Deletes the pictures no row points at any more — aged out, removed,
+    /// or cleared. Only inside the history's own folder, and only after the
+    /// list that no longer names them has been written.
+    private func sweepImages() {
+        let kept = Set(items.compactMap { item -> String? in
+            if case .image(let url, _) = item.payload { return url.lastPathComponent }
+            return nil
+        })
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: Self.imageFolder.path)) ?? []
+        for name in files where name.hasSuffix(".png") && !kept.contains(name) {
+            try? FileManager.default.removeItem(at: Self.imageFolder.appendingPathComponent(name))
+        }
     }
 }
 

@@ -123,16 +123,34 @@ private struct ClipPreview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ScrollView {
-                Text(item.fullText)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.white)
-                    .textSelection(.enabled)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if case .image(let url, _) = item.payload {
+                Group {
+                    if let image = NSImage(contentsOf: url) {
+                        Image(nsImage: image)
+                            .resizable()
+                            .scaledToFit()
+                    } else {
+                        Image(systemName: "photo")
+                            .font(.system(size: 24, weight: .light))
+                            .foregroundStyle(Theme.tertiary)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                ScrollView {
+                    Text(item.fullText)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
             HStack(spacing: 6) {
                 if let app = item.app {
                     Text(app)
+                }
+                if case .image = item.payload {
+                    Text(item.fullText)
                 }
                 Text(Self.stamp(item.date))
                 Spacer()
@@ -181,6 +199,10 @@ private struct ClipRow: View {
     @State private var justCopied = false
 
     private var hidden: Bool { privacy.hides(.clipboard, item.id.uuidString) }
+    private var isImage: Bool {
+        if case .image = item.payload { return true }
+        return false
+    }
 
     var body: some View {
         HStack(spacing: 9) {
@@ -188,6 +210,11 @@ private struct ClipRow: View {
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(justCopied ? Color.green : Theme.tertiary)
                 .frame(width: 14)
+            if case .image(let url, _) = item.payload {
+                ClipThumbnail(url: url)
+                    .blur(radius: hidden ? 8 : 0)
+                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+            }
             SpoilerText(
                 text: item.preview.replacingOccurrences(of: "\n", with: " "),
                 hidden: hidden,
@@ -219,7 +246,9 @@ private struct ClipRow: View {
             }
         }
         .padding(.horizontal, 9)
-        .frame(height: 26)
+        // A picture gets a row tall enough to recognise it by; text stays at
+        // one line.
+        .frame(height: isImage ? 48 : 26)
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
                 .fill(hovering || isSelected ? Theme.surfaceHover : Theme.surface)
@@ -235,5 +264,43 @@ private struct ClipRow: View {
         }
         .animation(Theme.contentAnimation, value: hovering)
         .animation(Theme.contentAnimation, value: justCopied)
+    }
+}
+
+/// A small copy of a picture in the history, made once and kept: decoding a
+/// full screenshot for every row on every redraw would make the list crawl.
+private struct ClipThumbnail: View {
+    let url: URL
+
+    var body: some View {
+        Group {
+            if let image = Self.thumbnail(for: url) {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: "photo")
+                    .foregroundStyle(Theme.tertiary)
+            }
+        }
+        .frame(width: 64, height: 38)
+    }
+
+    @MainActor private static let cache = NSCache<NSURL, NSImage>()
+
+    @MainActor
+    private static func thumbnail(for url: URL) -> NSImage? {
+        if let cached = cache.object(forKey: url as NSURL) { return cached }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 160,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+        else { return nil }
+        let image = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+        cache.setObject(image, forKey: url as NSURL)
+        return image
     }
 }
