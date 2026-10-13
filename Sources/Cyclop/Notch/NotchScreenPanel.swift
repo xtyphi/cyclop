@@ -287,16 +287,25 @@ final class NotchScreenPanel {
     private func handleKey(_ event: NSEvent) -> Bool {
         guard state.isOpen, vm.tab == .clipboard else { return false }
         let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
-        guard flags.isEmpty else { return false }
         let key: ClipboardBrowser.Key
-        switch Int(event.keyCode) {
-        case 126: key = .up
-        case 125: key = .down
-        case 124: key = .right
-        case 123: key = .left
-        case 36, 76: key = .enter
-        case 53: key = .escape
-        default: return false
+        // Maccy's two: ⌘1…⌘9 for a row by its place, ⌥⌫ to drop one. By key
+        // code, so they hold in any keyboard layout.
+        let digits: [UInt16: Int] = [18: 1, 19: 2, 20: 3, 21: 4, 23: 5, 22: 6, 26: 7, 28: 8, 25: 9]
+        if flags == .command, let number = digits[event.keyCode] {
+            key = .pick(number)
+        } else if flags == .option, event.keyCode == 51 {
+            key = .delete
+        } else {
+            guard flags.isEmpty else { return false }
+            switch Int(event.keyCode) {
+            case 126: key = .up
+            case 125: key = .down
+            case 124: key = .right
+            case 123: key = .left
+            case 36, 76: key = .enter
+            case 53: key = .escape
+            default: return false
+            }
         }
         switch vm.clipboardBrowser.handle(key) {
         case .ignored: return false
