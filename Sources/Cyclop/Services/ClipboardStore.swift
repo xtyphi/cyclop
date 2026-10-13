@@ -395,10 +395,12 @@ final class ClipboardBrowser: ObservableObject {
         case up, down, enter, escape, right, left
         /// ⌥⌫: drop the chosen row from the history.
         case delete
+        /// ⌥Enter: copy the chosen row and paste it into the app in front.
+        case paste
         /// ⌘1…⌘9: copy the row at that place in the list and close.
         case pick(Int)
     }
-    enum Outcome { case ignored, handled, close }
+    enum Outcome { case ignored, handled, close, closeAndPaste }
 
     @Published var query = "" {
         didSet {
@@ -473,6 +475,11 @@ final class ClipboardBrowser: ObservableObject {
             store.copy(item)
             reset()
             return .close
+        case .paste:
+            guard let item = selected else { return .handled }
+            store.copy(item)
+            reset()
+            return .closeAndPaste
         case .pick(let number):
             guard rows.indices.contains(number - 1) else { return .handled }
             store.copy(rows[number - 1])

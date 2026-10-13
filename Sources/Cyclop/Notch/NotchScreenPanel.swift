@@ -295,6 +295,8 @@ final class NotchScreenPanel {
             key = .pick(number)
         } else if flags == .option, event.keyCode == 51 {
             key = .delete
+        } else if flags == .option, event.keyCode == 36 || event.keyCode == 76 {
+            key = .paste
         } else {
             guard flags.isEmpty else { return false }
             switch Int(event.keyCode) {
@@ -312,6 +314,10 @@ final class NotchScreenPanel {
         case .handled: return true
         case .close:
             dismissSummoned()
+            return true
+        case .closeAndPaste:
+            dismissSummoned()
+            Paster.pasteSoon()
             return true
         }
     }
