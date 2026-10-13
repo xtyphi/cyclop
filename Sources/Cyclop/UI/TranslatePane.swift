@@ -94,7 +94,7 @@ struct TranslatePane: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusL, style: .continuous)
                 .fill(Theme.surface)
         )
     }
@@ -117,7 +117,7 @@ struct TranslatePane: View {
         if let failure = translator.failure {
             VStack(alignment: .leading, spacing: 6) {
                 Text(failure)
-                    .font(.system(size: 11))
+                    .font(.system(size: Theme.footnote))
                     .foregroundStyle(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
@@ -128,7 +128,7 @@ struct TranslatePane: View {
                 }
                 .buttonStyle(.plain)
                 .pointerStyle(.default)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: Theme.caption, weight: .medium))
                 .foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -193,7 +193,7 @@ struct TranslatePane: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Text(title.uppercased())
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: Theme.caption, weight: .semibold))
                     .tracking(0.8)
                     .foregroundStyle(Theme.tertiary)
                 Spacer(minLength: 4)

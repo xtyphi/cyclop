@@ -50,7 +50,7 @@ struct CalendarPane: View {
         } label: {
             if showingCalendars {
                 Text(localized("Done"))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: Theme.footnote, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
@@ -74,7 +74,7 @@ struct CalendarPane: View {
     private var calendarsList: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(localized("Calendars"))
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: Theme.body, weight: .semibold))
                 .foregroundStyle(Theme.secondary)
                 .padding(.trailing, 60)
             ScrollView {
@@ -88,7 +88,7 @@ struct CalendarPane: View {
                                     .font(.system(size: 13))
                                     .foregroundStyle(option.isShown ? .white : Theme.tertiary)
                                 Text(option.title)
-                                    .font(.system(size: 12))
+                                    .font(.system(size: Theme.body))
                                     .foregroundStyle(Theme.secondary)
                                 Spacer(minLength: 0)
                             }
@@ -116,7 +116,7 @@ struct CalendarPane: View {
                     SpoilerText(
                         text: next.title,
                         hidden: hidden,
-                        font: .system(size: 16, weight: .semibold),
+                        font: .system(size: Theme.title, weight: .semibold),
                         height: 18,
                         seed: UInt64(bitPattern: Int64(next.id.hashValue))
                     )
@@ -125,7 +125,7 @@ struct CalendarPane: View {
                     }
                 }
                 Text(subtitle(for: next))
-                    .font(.system(size: 11.5))
+                    .font(.system(size: Theme.body))
                     .foregroundStyle(Theme.secondary)
                     .lineLimit(1)
                     .padding(.top, 4)
@@ -138,9 +138,9 @@ struct CalendarPane: View {
                         calendar.join(next)
                     } label: {
                         HStack(spacing: 6) {
-                            Image(systemName: "video.fill").font(.system(size: 10))
+                            Image(systemName: "video.fill").font(.system(size: Theme.caption))
                             Text(next.provider.map { localized("Join · %@", $0) } ?? localized("Join"))
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: Theme.footnote, weight: .medium))
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
@@ -172,14 +172,14 @@ struct CalendarPane: View {
                         .fill(Color(meeting.calendarColor))
                         .frame(width: 5, height: 5)
                     Text(Self.clock.string(from: meeting.start))
-                        .font(.system(size: 10, weight: .medium).monospacedDigit())
+                        .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
                         .foregroundStyle(Theme.secondary)
                         .frame(width: 34, alignment: .leading)
                         .opacity(Foundation.Calendar.current.isDateInToday(meeting.start) ? 1 : 0.6)
                     SpoilerText(
                         text: meeting.title,
                         hidden: hidden,
-                        font: .system(size: 10.5),
+                        font: .system(size: Theme.footnote),
                         color: Theme.tertiary,
                         height: 11,
                         seed: UInt64(bitPattern: Int64(meeting.id.hashValue))
@@ -192,7 +192,7 @@ struct CalendarPane: View {
             }
             if calendar.upcoming.isEmpty {
                 Text("No other meetings this week")
-                    .font(.system(size: 10))
+                    .font(.system(size: Theme.caption))
                     .foregroundStyle(Theme.tertiary)
             }
             Spacer(minLength: 0)
@@ -279,10 +279,10 @@ struct CalendarPane: View {
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(Theme.tertiary)
             Text("See your next meetings")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: Theme.body, weight: .medium))
                 .foregroundStyle(Theme.secondary)
             Text("Cyclop needs access to Calendar. It is the only permission\nthe app asks for, and only for this tab.")
-                .font(.system(size: 10))
+                .font(.system(size: Theme.caption))
                 .foregroundStyle(Theme.tertiary)
                 .multilineTextAlignment(.center)
             // Padding and background belong inside the label: with .plain the
@@ -292,7 +292,7 @@ struct CalendarPane: View {
                 calendar.requestAccess()
             } label: {
                 Text("Allow")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: Theme.footnote, weight: .medium))
                     .foregroundStyle(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 6)
@@ -311,10 +311,10 @@ struct CalendarPane: View {
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(Theme.tertiary)
             Text("Calendar access is off")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: Theme.body, weight: .medium))
                 .foregroundStyle(Theme.secondary)
             Text("Settings → Privacy → Calendars")
-                .font(.system(size: 10))
+                .font(.system(size: Theme.caption))
                 .foregroundStyle(Theme.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -326,10 +326,10 @@ struct CalendarPane: View {
                 .font(.system(size: 22, weight: .light))
                 .foregroundStyle(Theme.tertiary)
             Text("No more meetings")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: Theme.body, weight: .medium))
                 .foregroundStyle(Theme.secondary)
             Text("Nothing on the calendar for the next day")
-                .font(.system(size: 10))
+                .font(.system(size: Theme.caption))
                 .foregroundStyle(Theme.tertiary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

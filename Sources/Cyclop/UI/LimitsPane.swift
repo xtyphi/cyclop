@@ -29,12 +29,12 @@ struct LimitsPane: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(name)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: Theme.body, weight: .semibold))
                     .foregroundStyle(.white)
                 Spacer(minLength: 4)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: Theme.caption, weight: .medium))
                         .foregroundStyle(Theme.tertiary)
                         .lineLimit(1)
                 }
@@ -42,7 +42,7 @@ struct LimitsPane: View {
 
             if snapshot.session == nil, snapshot.week == nil {
                 Text(snapshot.failure ?? localized("No data yet"))
-                    .font(.system(size: 11))
+                    .font(.system(size: Theme.footnote))
                     .foregroundStyle(Theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
@@ -54,7 +54,7 @@ struct LimitsPane: View {
                 }
                 if let failure = snapshot.failure {
                     Text(failure)
-                        .font(.system(size: 9.5))
+                        .font(.system(size: Theme.caption))
                         .foregroundStyle(Theme.tertiary)
                         .lineLimit(1)
                 }
@@ -63,7 +63,7 @@ struct LimitsPane: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusL, style: .continuous)
                 .fill(Theme.surface)
         )
     }
@@ -74,11 +74,12 @@ struct LimitsPane: View {
         return VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline) {
                 Text(label)
-                    .font(.system(size: 11))
+                    .font(.system(size: Theme.footnote))
                     .foregroundStyle(Theme.secondary)
                 Spacer(minLength: 4)
                 Text("\(remaining)%")
-                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .font(.system(size: Theme.headline, weight: .semibold).monospacedDigit())
+                    .rollingNumber(remaining)
                     .foregroundStyle(low ? Color.orange : .white)
             }
             GeometryReader { geo in
@@ -91,7 +92,7 @@ struct LimitsPane: View {
             }
             .frame(height: 4)
             Text(resetPhrase(window.resetsAt))
-                .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
                 .foregroundStyle(Theme.tertiary)
                 .lineLimit(1)
         }

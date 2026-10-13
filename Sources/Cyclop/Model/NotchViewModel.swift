@@ -289,6 +289,8 @@ final class NotchViewModel: ObservableObject {
     let teleprompter: TeleprompterStore
     /// Shared by every pane that shows something worth not showing.
     let privacy = PrivacyMode()
+    /// The timer or the song on the sides of the folded notch.
+    let liveActivity = LiveActivity()
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -316,6 +318,14 @@ final class NotchViewModel: ObservableObject {
             return media.pauseIfPlaying()
         }
         focus.alert.resumeMedia = { [weak self] in self?.media.resumeIfPaused() }
+        liveActivity.bind(focus: focus, media: media, hiddenTabs: $hiddenTabs)
+
+        // `open Cyclop.app --args -initialTab focus` lands on that tab: the
+        // way to look at a pane from a script, which cannot hover the rail.
+        if let raw = UserDefaults.standard.volatileDomain(forName: UserDefaults.argumentDomain)["initialTab"] as? String,
+           let start = Tab(rawValue: raw), isVisible(start) {
+            tab = start
+        }
 
         // The panel header reads through to the stores — counters, the source
         // name, the equalizer. Nested ObservableObjects do not propagate on

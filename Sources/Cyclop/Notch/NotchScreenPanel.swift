@@ -98,7 +98,7 @@ final class NotchScreenPanel {
         let root = NotchRootView(frame: CGRect(origin: .zero, size: geometry.windowSize))
         root.autoresizingMask = [.width, .height]
 
-        let hosting = NSHostingView(rootView: NotchContentView(vm: vm, panel: state, alert: vm.focus.alert))
+        let hosting = NSHostingView(rootView: NotchContentView(vm: vm, panel: state, alert: vm.focus.alert, activity: vm.liveActivity))
         hosting.frame = root.bounds
         hosting.autoresizingMask = [.width, .height]
         if #available(macOS 14.0, *) {
@@ -139,9 +139,16 @@ final class NotchScreenPanel {
         panel.onPress = { [weak self] in
             // A click on the folded notch can only be a click on the focus
             // notice: it closes the notice, and must not open a typing tab.
-            guard let self, state.isOpen || vm.focus.alert.current == nil else { return }
+            guard let self, state.isOpen || foldedSize == geometry.collapsedSize else { return }
             guard vm.clickTakesKeyboard else { return }
             state.wantsKeyboard = true
+        }
+
+        state.onActivate = { [weak self] tab in
+            guard let self else { return }
+            state.select(tab)
+            setOpen(true)
+            scheduleCollapseIfPointerAway()
         }
 
         state.onDismiss = { [weak self] in
@@ -213,8 +220,12 @@ final class NotchScreenPanel {
         // The focus notice widens the folded notch for five seconds, and
         // its close button has to be clickable for exactly that long. Open,
         // the panel's own rect already covers where the notice is drawn.
-        vm.focus.alert.$current
-            .removeDuplicates()
+        // The timer or the song on the folded notch's sides widens it for as
+        // long as either runs, and the sides are clickable for that long.
+        Publishers.Merge(
+            vm.focus.alert.$current.removeDuplicates().map { _ in () },
+            vm.liveActivity.$kind.removeDuplicates().map { _ in () }
+        )
             .sink { [weak self] _ in
                 MainActor.assumeIsolated {
                     // A pass later, for the same reason as the tab: this
@@ -451,6 +462,15 @@ final class NotchScreenPanel {
         pointer.closeRect = geometry.hoverRect(for: state.openBodySize)
     }
 
+    /// What the folded notch claims: the notice, the timer or the song on
+    /// its sides, or the notch alone. The sides only on a real notch — on a
+    /// drawn one they would be a black pill parked over a full-screen app.
+    private var foldedSize: CGSize {
+        if vm.focus.alert.current != nil { return geometry.alertSize }
+        if vm.liveActivity.kind != nil, geometry.isPhysical { return geometry.activitySize }
+        return geometry.collapsedSize
+    }
+
     private func applyActiveRect(open: Bool) {
         guard let rootView else { return }
         // Collapsed, the panel claims only its target strip — on a synthetic
@@ -459,8 +479,7 @@ final class NotchScreenPanel {
         // The open size is the current tab's, not a constant: the teleprompter
         // is taller, and a rect cut for 208 would leave the bottom half of it
         // visible but untouchable.
-        let folded = vm.focus.alert.current == nil ? geometry.collapsedSize : geometry.alertSize
-        let size = open ? state.openBodySize : folded
+        let size = open ? state.openBodySize : foldedSize
         var rect = geometry.contentRect(for: size)
         if open {
             // Slack so the concave shoulders stay grabbable. Never while

@@ -80,7 +80,7 @@ struct CurrencyPane: View {
 
             if let failure = currencies.failure, currencies.rates.isEmpty {
                 Text(failure)
-                    .font(.system(size: 10))
+                    .font(.system(size: Theme.caption))
                     .foregroundStyle(Theme.secondary)
                     .lineLimit(2)
             }
@@ -101,10 +101,10 @@ struct CurrencyPane: View {
             } label: {
                 HStack(spacing: 6) {
                     Text(code.uppercased())
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: Theme.footnote, weight: .semibold))
                         .foregroundStyle(.white)
                     Text(name)
-                        .font(.system(size: 10))
+                        .font(.system(size: Theme.caption))
                         .foregroundStyle(Theme.tertiary)
                         .lineLimit(1)
                     Spacer(minLength: 2)
@@ -115,7 +115,7 @@ struct CurrencyPane: View {
                 .padding(.horizontal, 8)
                 .frame(height: 22)
                 .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
                         .fill(Theme.surface)
                 )
             }
@@ -124,14 +124,14 @@ struct CurrencyPane: View {
 
             TextField("0", text: text)
             .textFieldStyle(.plain)
-            .font(.system(size: 26, weight: .medium).monospacedDigit())
+            .font(.system(size: Theme.display, weight: .medium).monospacedDigit())
             .foregroundStyle(.white)
             .tint(Theme.secondary)
             .focused($focused, equals: side)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .padding(10)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.radiusL, style: .continuous)
                     .fill(Theme.surface)
             )
             .onKeyPress(.escape) {
@@ -155,7 +155,7 @@ struct CurrencyPane: View {
                     .foregroundStyle(Theme.tertiary)
                 TextField(localized("Search currency"), text: $query)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 11))
+                    .font(.system(size: Theme.footnote))
                     .foregroundStyle(.white)
                     .tint(Theme.secondary)
                     .focused($focused, equals: .search)
@@ -179,25 +179,25 @@ struct CurrencyPane: View {
                 Button(localized("Done")) { closePicker() }
                     .buttonStyle(.plain)
                     .pointerStyle(.default)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: Theme.footnote, weight: .medium))
                     .foregroundStyle(.white)
             }
             .padding(.horizontal, 9)
             .frame(height: 24)
             .background(
-                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                     .fill(Theme.surface)
             )
 
             if let failure = currencies.failure, currencies.currencies.isEmpty {
                 Text(failure)
-                    .font(.system(size: 11))
+                    .font(.system(size: Theme.footnote))
                     .foregroundStyle(Theme.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(.top, 8)
             } else if matches.isEmpty {
                 Text(localized("No currencies match"))
-                    .font(.system(size: 11))
+                    .font(.system(size: Theme.footnote))
                     .foregroundStyle(Theme.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     .padding(.top, 8)
@@ -210,11 +210,11 @@ struct CurrencyPane: View {
                             } label: {
                                 HStack(spacing: 8) {
                                     Text(currency.displayCode)
-                                        .font(.system(size: 11, weight: .semibold).monospaced())
+                                        .font(.system(size: Theme.footnote, weight: .semibold).monospaced())
                                         .foregroundStyle(.white)
                                         .frame(width: 44, alignment: .leading)
                                     Text(currency.name)
-                                        .font(.system(size: 11))
+                                        .font(.system(size: Theme.footnote))
                                         .foregroundStyle(Theme.secondary)
                                         .lineLimit(1)
                                     Spacer(minLength: 0)
@@ -227,7 +227,7 @@ struct CurrencyPane: View {
                                 .padding(.horizontal, 8)
                                 .frame(height: 26)
                                 .background(
-                                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                    RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
                                         .fill(currency.code == selected ? Theme.surfaceHover : Color.clear)
                                 )
                                 .contentShape(Rectangle())

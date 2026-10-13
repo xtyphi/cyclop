@@ -4,7 +4,7 @@ import SwiftUI
 /// title before it has fetched the new cover, so without this the panel would
 /// sit on an empty grey square for a moment on every track change.
 struct SkeletonBox: View {
-    var cornerRadius: CGFloat = 14
+    var cornerRadius: CGFloat = Theme.radiusXL
     @State private var sweep = false
 
     var body: some View {
@@ -34,6 +34,7 @@ struct SkeletonBox: View {
 /// marker next to the source name.
 struct EqualizerBars: View {
     var isAnimating: Bool
+    var color: Color = Theme.tertiary
     @State private var up = false
 
     private let low: [CGFloat] = [4, 7, 5]
@@ -43,7 +44,7 @@ struct EqualizerBars: View {
         HStack(alignment: .bottom, spacing: 2) {
             ForEach(0..<3, id: \.self) { index in
                 Capsule()
-                    .fill(Theme.tertiary)
+                    .fill(color)
                     .frame(width: 2, height: up ? high[index] : low[index])
                     .animation(
                         isAnimating

@@ -108,7 +108,7 @@ private struct Splitmix64 {
 struct SpoilerText: View {
     let text: String
     let hidden: Bool
-    var font: Font = .system(size: 11)
+    var font: Font = .system(size: Theme.footnote)
     var color: Color = .white
     /// Height of the field that stands in for the text, so a covered row is
     /// exactly as tall as an uncovered one.
@@ -126,7 +126,7 @@ struct SpoilerText: View {
                 // Or the trailing spacer would split the row with it, and the
                 // width of the covered area would follow the row's contents.
                 .layoutPriority(1)
-                .clipShape(RoundedRectangle(cornerRadius: 3, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusXS, style: .continuous))
                 // Announced rather than described: a screen reader must not be
                 // the hole in a feature about not showing things.
                 .accessibilityLabel(Text(localized("Hidden")))

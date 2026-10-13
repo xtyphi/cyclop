@@ -186,7 +186,7 @@ struct ShelfPane: View {
                     .foregroundStyle(.white)
                     .frame(width: 22, height: 46)
                     .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                             .fill(Theme.surfaceHover)
                     )
             }
@@ -203,13 +203,13 @@ struct ShelfPane: View {
     }
 
     private var dropHint: some View {
-        RoundedRectangle(cornerRadius: 14, style: .continuous)
+        RoundedRectangle(cornerRadius: Theme.radiusXL, style: .continuous)
             .strokeBorder(
                 isTargeted ? Color.white.opacity(0.6) : Theme.hairline,
                 style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])
             )
             .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.radiusXL, style: .continuous)
                     .fill(isTargeted ? Theme.surface : .clear)
             )
             .overlay(
@@ -225,19 +225,19 @@ struct ShelfPane: View {
         HStack(spacing: 10) {
             if !shelf.selection.isEmpty {
                 Text(localized("Selected: %d", shelf.selection.count))
-                    .font(.system(size: 9))
+                    .font(.system(size: Theme.caption))
                     .foregroundStyle(Theme.tertiary)
             }
             Spacer()
             if !shelf.selection.isEmpty {
                 Button("Deselect") { shelf.clearSelection() }
                     .buttonStyle(.plain)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: Theme.caption, weight: .medium))
                     .foregroundStyle(Theme.secondary)
             }
             Button("Clear") { shelf.clear() }
                 .buttonStyle(.plain)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: Theme.caption, weight: .medium))
                 .foregroundStyle(Theme.secondary)
         }
         .padding(.top, 2)
@@ -271,7 +271,7 @@ private struct ShelfCard: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 68, height: 40)
             Text(item.name)
-                .font(.system(size: 9))
+                .font(.system(size: Theme.caption))
                 .foregroundStyle(Theme.secondary)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
@@ -281,11 +281,11 @@ private struct ShelfCard: View {
         .padding(.vertical, 8)
         .frame(width: 86, height: 92)
         .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusL, style: .continuous)
                 .fill(isSelected ? Color.white.opacity(0.18) : (isHovered ? Theme.surfaceHover : Theme.surface))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusL, style: .continuous)
                 .strokeBorder(Color.white.opacity(isSelected ? 0.55 : 0), lineWidth: 1.5)
                 .allowsHitTesting(false)
         )
@@ -319,7 +319,7 @@ private struct ShelfCard: View {
                 .padding(4)
             }
         }
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Theme.radiusL, style: .continuous))
         .contextMenu {
             Button("Copy") { shelf.copy(item) }
             Button("Open") { shelf.open(item) }

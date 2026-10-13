@@ -22,7 +22,8 @@ struct FocusPane: View {
                 controls
                 presets
                 Text(localized("Sprints today: %d", timer.completedToday))
-                    .font(.system(size: 10.5, weight: .medium).monospacedDigit())
+                    .font(.system(size: Theme.footnote, weight: .medium).monospacedDigit())
+                    .rollingNumber(timer.completedToday)
                     .foregroundStyle(Theme.tertiary)
             }
             // Wide enough for the longest row — Resume and two icons, 173 pt
@@ -67,10 +68,11 @@ struct FocusPane: View {
                 .animation(.linear(duration: 0.9), value: timer.progress)
             VStack(spacing: 2) {
                 Text(Self.clock(timer.remaining))
-                    .font(.system(size: 24, weight: .semibold).monospacedDigit())
+                    .font(.system(size: Theme.display, weight: .semibold).monospacedDigit())
+                    .rollingNumber(Self.clock(timer.remaining), countsDown: true)
                     .foregroundStyle(.white)
                 Text(phaseTitle)
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.system(size: Theme.footnote, weight: .medium))
                     .foregroundStyle(timer.phase == .idle ? Theme.tertiary : accent)
             }
         }
@@ -95,7 +97,7 @@ struct FocusPane: View {
                     timer.selectPreset(index)
                 } label: {
                     Text(FocusTimer.presets[index].label)
-                        .font(.system(size: 11.5, weight: .semibold).monospacedDigit())
+                        .font(.system(size: Theme.body, weight: .semibold).monospacedDigit())
                         .foregroundStyle(selected ? Color.black : Theme.secondary)
                         .padding(.horizontal, 10)
                         .frame(height: 24)
@@ -160,7 +162,7 @@ struct FocusPane: View {
                 Image(systemName: symbol)
                     .font(.system(size: 9.5, weight: .bold))
                 Text(title)
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.system(size: Theme.body, weight: .semibold))
             }
             .foregroundStyle(prominent ? Color.black : Color.white)
             .padding(.horizontal, 12)
@@ -196,10 +198,10 @@ private struct WeekStrip: View {
             arrow("chevron.right", enabled: offset < 0) { offset += 1 }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title(days))
-                    .font(.system(size: 10.5, weight: .semibold))
+                    .font(.system(size: Theme.footnote, weight: .semibold))
                     .foregroundStyle(Theme.secondary)
                 Text(localized("Total: %d", days.reduce(0) { $0 + timer.sprints(on: $1) }))
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
                     .foregroundStyle(Theme.tertiary)
             }
             .lineLimit(1)
@@ -247,21 +249,21 @@ private struct WeekStrip: View {
             // One line, as wide as the square: left to itself the label was
             // offered less than its own width and broke "Thu" into a column.
             Text("\(Self.symbols[(weekday - 1) % 7]) \(calendar.component(.day, from: day))")
-                .font(.system(size: 9, weight: .medium))
+                .font(.system(size: Theme.caption, weight: .medium))
                 .foregroundStyle(isToday ? Theme.secondary : Theme.tertiary)
                 .lineLimit(1)
                 .fixedSize()
                 .frame(width: 34)
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
                 .fill(isFuture ? Color.white.opacity(0.07) : Self.shade(count))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
                         .strokeBorder(isToday ? Color.white.opacity(0.7) : .clear, lineWidth: 1)
                 )
                 .overlay {
                     if count > 0 {
                         Text("\(count)")
-                            .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                            .font(.system(size: Theme.footnote, weight: .semibold).monospacedDigit())
                             .foregroundStyle(count >= 3 ? Color.black.opacity(0.8) : Color.white.opacity(0.9))
                     }
                 }

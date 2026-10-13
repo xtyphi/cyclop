@@ -9,6 +9,7 @@ import SwiftUI
 @MainActor
 func flash(_ flag: Binding<Bool>) {
     flag.wrappedValue = true
+    Haptics.confirm()
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) {
         flag.wrappedValue = false
     }
@@ -31,6 +32,7 @@ struct CopyButton: View {
             flash($copied)
         } label: {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                .contentTransition(.symbolEffect(.replace))
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(copied ? Color.green : Theme.secondary)
         }

@@ -143,7 +143,7 @@ struct TeleprompterPane: View {
 
     private var editor: some View {
         TextEditor(text: $prompter.script)
-            .font(.system(size: 13, design: .rounded))
+            .font(.system(size: Theme.headline, design: .rounded))
             .scrollContentBackground(.hidden)
             .foregroundStyle(.white)
             .focused($focused)
@@ -152,7 +152,7 @@ struct TeleprompterPane: View {
             .padding(.horizontal, EditorInset.horizontal)
             .padding(.vertical, EditorInset.vertical)
             .background(Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radiusL, style: .continuous))
             .padding(.horizontal, 14)
             .overlay(alignment: .topLeading) {
                 if prompter.script.isEmpty {
@@ -163,7 +163,7 @@ struct TeleprompterPane: View {
                     // Getting this wrong parks the caret above and left of the
                     // placeholder it is supposed to stand in front of.
                     Text("Paste the script here")
-                        .font(.system(size: 13, design: .rounded))
+                        .font(.system(size: Theme.headline, design: .rounded))
                         .foregroundStyle(Theme.tertiary)
                         .padding(.leading, 14 + EditorInset.horizontal + 5)
                         .padding(.top, EditorInset.vertical)
@@ -184,7 +184,7 @@ struct TeleprompterPane: View {
                 }
                 .buttonStyle(.plain)
                 .pointerStyle(.default)
-                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .font(.system(size: Theme.body, weight: .semibold, design: .rounded))
                 .foregroundStyle(prompter.script.isEmpty ? Theme.tertiary : .white)
                 .disabled(prompter.script.isEmpty)
             } else {
@@ -195,6 +195,7 @@ struct TeleprompterPane: View {
 
                 Button { prompter.toggle() } label: {
                     Image(systemName: prompter.isRunning ? "pause.fill" : "play.fill")
+                        .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(NotchButtonStyle(size: 32, prominent: true))
 
@@ -229,7 +230,7 @@ struct TeleprompterPane: View {
                 .tint(.white.opacity(0.7))
                 .frame(width: 96)
             Text(String(format: "%.1f×", prompter.speed))
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .font(.system(size: Theme.footnote, weight: .medium, design: .monospaced))
                 .foregroundStyle(Theme.secondary)
                 .frame(width: 30, alignment: .leading)
         }

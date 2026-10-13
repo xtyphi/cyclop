@@ -27,6 +27,10 @@ final class PanelState: ObservableObject {
     /// sends the user somewhere else entirely.
     var onDismiss: (() -> Void)?
 
+    /// A click on the timer or the song beside the folded notch: open the
+    /// panel on the tab it belongs to.
+    var onActivate: ((NotchViewModel.Tab) -> Void)?
+
     init(geometry: NotchGeometry, vm: NotchViewModel) {
         self.geometry = geometry
         self.vm = vm

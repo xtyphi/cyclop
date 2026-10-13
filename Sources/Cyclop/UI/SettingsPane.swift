@@ -217,7 +217,7 @@ struct SettingsPane: View {
     private func section<Rows: View>(_ title: String, @ViewBuilder rows: () -> Rows) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(title.uppercased())
-                .font(.system(size: 9, weight: .semibold))
+                .font(.system(size: Theme.caption, weight: .semibold))
                 .tracking(0.6)
                 .foregroundStyle(Theme.tertiary)
                 .padding(.leading, 8)
@@ -226,7 +226,7 @@ struct SettingsPane: View {
             }
             .padding(4)
             .background(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                RoundedRectangle(cornerRadius: Theme.radiusL, style: .continuous)
                     .fill(Theme.surface)
             )
         }
@@ -239,7 +239,7 @@ struct SettingsPane: View {
                 .foregroundStyle(Theme.secondary)
                 .frame(width: 16)
             Text(title)
-                .font(.system(size: 11.5, weight: .medium))
+                .font(.system(size: Theme.body, weight: .medium))
                 .foregroundStyle(.white)
             Spacer(minLength: 8)
             Toggle("", isOn: isOn)
@@ -263,7 +263,7 @@ struct SettingsPane: View {
                     .foregroundStyle(Theme.secondary)
                     .frame(width: 16)
                 Text(title)
-                    .font(.system(size: 11.5, weight: .medium))
+                    .font(.system(size: Theme.body, weight: .medium))
                     .foregroundStyle(.white)
                 Spacer(minLength: 8)
             }

@@ -48,7 +48,7 @@ struct NotesPane: View {
     private var editorCover: some View {
         ZStack {
             SpoilerField(seed: seed(for: notes.selected))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous))
             if let id = notes.selected {
                 Button { privacy.reveal("note.\(id)") } label: {
                     Image(systemName: "eye")
@@ -86,16 +86,16 @@ struct NotesPane: View {
                     Image(systemName: "plus")
                         .font(.system(size: 10, weight: .semibold))
                     Text("New Note")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: Theme.footnote, weight: .medium))
                 }
                 .foregroundStyle(Theme.secondary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 24)
                 .background(
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                         .fill(Theme.surface)
                 )
-                .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous))
             }
             .buttonStyle(.plain)
             .pointerStyle(.default)
@@ -151,7 +151,7 @@ struct NotesPane: View {
                 .textEditorStyle(.plain)
                 .scrollContentBackground(.hidden)
                 .scrollIndicators(.hidden)
-                .font(.system(size: 12.5))
+                .font(.system(size: Theme.headline))
                 .foregroundStyle(.white)
                 .tint(Theme.secondary)
                 .focused($focused)
@@ -196,7 +196,7 @@ struct NotesPane: View {
 
             if currentText.isEmpty {
                 Text("Jot something down…")
-                    .font(.system(size: 12.5))
+                    .font(.system(size: Theme.headline))
                     .foregroundStyle(Theme.tertiary)
                     .allowsHitTesting(false)
             }
@@ -223,7 +223,7 @@ struct NotesPane: View {
         }
         .padding(10)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusL, style: .continuous)
                 .fill(Theme.surface)
         )
     }
@@ -256,7 +256,7 @@ private struct NoteRow: View {
         HStack(spacing: 6) {
             if hidden {
                 Text(Self.clock.string(from: note.edited))
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
                     .foregroundStyle(isSelected ? Theme.secondary : Theme.tertiary)
                     // The dust beside it asks for every point of the row and
                     // asks with a higher layout priority, so without this the
@@ -272,7 +272,7 @@ private struct NoteRow: View {
                 )
             } else {
                 Text(preview)
-                    .font(.system(size: 11, weight: isSelected ? .medium : .regular))
+                    .font(.system(size: Theme.footnote, weight: isSelected ? .medium : .regular))
                     .foregroundStyle(isSelected ? .white : Theme.secondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -295,7 +295,7 @@ private struct NoteRow: View {
         .padding(.horizontal, 8)
         .frame(height: 26)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                 .fill(isSelected ? Theme.surfaceHover : hovering ? Theme.surface : .clear)
         )
         .contentShape(Rectangle())

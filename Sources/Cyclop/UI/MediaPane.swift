@@ -23,11 +23,11 @@ struct MediaPane: View {
                     reveal {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(track.title)
-                                .font(.system(size: 16, weight: .semibold))
+                                .font(.system(size: Theme.title, weight: .semibold))
                                 .foregroundStyle(.white)
                                 .lineLimit(1)
                             Text(subtitle(for: track))
-                                .font(.system(size: 11.5))
+                                .font(.system(size: Theme.body))
                                 .foregroundStyle(Theme.secondary)
                                 .lineLimit(1)
                         }
@@ -106,19 +106,19 @@ struct MediaPane: View {
                     .aspectRatio(contentMode: isSquare(image) ? .fill : .fit)
                     .transition(.opacity)
             } else {
-                SkeletonBox(cornerRadius: 14)
+                SkeletonBox(cornerRadius: Theme.radiusXL)
             }
         }
         .frame(width: 118, height: 118)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusXL, style: .continuous))
         // The same shape again, this time for the pointer. `clipShape` hides
         // overflow but does not stop it being touched, and that overhang once
         // reached the tab rail on the left, where four icons stopped answering
         // the pointer (#22). Fitting non-square covers takes the overflow away
         // at its source; this stays as the guard it always was.
-        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: Theme.radiusXL, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusXL, style: .continuous)
                 .strokeBorder(Theme.hairline, lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.5), radius: 12, y: 5)
@@ -136,6 +136,7 @@ struct MediaPane: View {
     private var scrubber: some View {
         HStack(spacing: 10) {
             Text(formatTime(progress * media.duration))
+                .rollingNumber(formatTime(progress * media.duration))
                 .frame(width: 32, alignment: .leading)
 
             GeometryReader { geo in
@@ -185,7 +186,7 @@ struct MediaPane: View {
             Text(formatTime(media.duration))
                 .frame(width: 32, alignment: .trailing)
         }
-        .font(.system(size: 10, weight: .medium).monospacedDigit())
+        .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
         .foregroundStyle(Theme.tertiary)
     }
 
@@ -204,6 +205,7 @@ struct MediaPane: View {
                 .opacity(media.canSkip ? 1 : 0.35)
             Button { media.togglePlayPause() } label: {
                 Image(systemName: media.isPlaying ? "pause.fill" : "play.fill")
+                    .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(NotchButtonStyle(size: 40, prominent: true))
             Button { media.next() } label: { Image(systemName: "forward.fill") }
@@ -226,7 +228,7 @@ struct MediaPane: View {
             // Status, not instruction: an empty pane on its own would not say
             // whether nothing is playing or nothing could be read.
             Text("Nothing is playing")
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: Theme.body, weight: .medium))
                 .foregroundStyle(Theme.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

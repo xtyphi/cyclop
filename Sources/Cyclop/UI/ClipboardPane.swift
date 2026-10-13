@@ -21,7 +21,7 @@ struct ClipboardPane: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if rows.isEmpty {
                 Text(localized("Nothing found"))
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: Theme.footnote, weight: .medium))
                     .foregroundStyle(Theme.tertiary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -84,7 +84,7 @@ struct ClipboardPane: View {
                 .foregroundStyle(Theme.tertiary)
             TextField(localized("Search"), text: $browser.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 11))
+                .font(.system(size: Theme.footnote))
                 .foregroundStyle(.white)
                 .tint(Theme.secondary)
                 .focused($searchFocused)
@@ -100,14 +100,14 @@ struct ClipboardPane: View {
             PrivacySwitch(privacy: privacy, section: .clipboard)
             Button(localized("Clear")) { clipboard.clear() }
                 .buttonStyle(.plain)
-                .font(.system(size: 10, weight: .medium))
+                .font(.system(size: Theme.caption, weight: .medium))
                 .foregroundStyle(Theme.secondary)
                 .pointerStyle(.default)
         }
         .padding(.horizontal, 9)
         .frame(height: 24)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                 .fill(Theme.surface)
         )
         .contentShape(Rectangle())
@@ -140,7 +140,7 @@ private struct ClipPreview: View {
             } else {
                 ScrollView {
                     Text(item.fullText)
-                        .font(.system(size: 12))
+                        .font(.system(size: Theme.body))
                         .foregroundStyle(.white)
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -165,16 +165,16 @@ private struct ClipPreview: View {
                 .buttonStyle(.plain)
                 .pointerStyle(.default)
             }
-            .font(.system(size: 10, weight: .medium))
+            .font(.system(size: Theme.caption, weight: .medium))
             .foregroundStyle(Theme.tertiary)
         }
         .padding(10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                 .fill(Color(white: 0.09))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                         .strokeBorder(Theme.hairline, lineWidth: 1)
                 )
         )
@@ -212,12 +212,13 @@ private struct ClipRow: View {
         HStack(spacing: 9) {
             Image(systemName: justCopied ? "checkmark" : item.symbol)
                 .font(.system(size: 10, weight: .medium))
+                .contentTransition(.symbolEffect(.replace))
                 .foregroundStyle(justCopied ? Color.green : Theme.tertiary)
                 .frame(width: 14)
             if case .image(let url, _) = item.payload {
                 ClipThumbnail(url: url)
                     .blur(radius: hidden ? 8 : 0)
-                    .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusXS, style: .continuous))
             }
             SpoilerText(
                 text: item.preview.replacingOccurrences(of: "\n", with: " "),
@@ -250,7 +251,7 @@ private struct ClipRow: View {
             } else if let shortcut {
                 // Where the buttons go on hover, so the row keeps its width.
                 Text("⌘\(shortcut)")
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
                     .foregroundStyle(Theme.tertiary)
             }
         }
@@ -259,7 +260,7 @@ private struct ClipRow: View {
         // one line.
         .frame(height: isImage ? 48 : 26)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                 .fill(hovering || isSelected ? Theme.surfaceHover : Theme.surface)
         )
         .contentShape(Rectangle())

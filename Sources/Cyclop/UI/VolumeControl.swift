@@ -31,6 +31,7 @@ struct VolumeControl: View {
             Button { volume.toggleMute() } label: {
                 Image(systemName: symbol)
                     .font(.system(size: 10, weight: .medium))
+                    .contentTransition(.symbolEffect(.replace))
                     .foregroundStyle(Theme.secondary)
                     .frame(width: 18, height: 18, alignment: .leading)
                     .contentShape(Rectangle())
@@ -59,6 +60,9 @@ struct VolumeControl: View {
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         let target = Float(min(max(value.location.x / barWidth, 0), 1))
+                        // The end stops are felt, not only seen: a click on
+                        // arriving at silence or full, once per arrival.
+                        if (target == 0 || target == 1), target != dragging { Haptics.snap() }
                         dragging = target
                         volume.setLevel(target)
                     }

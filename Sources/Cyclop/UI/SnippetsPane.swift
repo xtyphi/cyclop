@@ -41,7 +41,7 @@ struct SnippetsPane: View {
                 .foregroundStyle(Theme.tertiary)
             TextField("", text: $snippets.query)
                 .textFieldStyle(.plain)
-                .font(.system(size: 11))
+                .font(.system(size: Theme.footnote))
                 .foregroundStyle(.white)
                 .tint(Theme.secondary)
                 .focused($focused, equals: .search)
@@ -71,7 +71,7 @@ struct SnippetsPane: View {
         .padding(.horizontal, 9)
         .frame(height: 24)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                 .fill(Theme.surface)
         )
         .contentShape(Rectangle())
@@ -90,7 +90,7 @@ struct SnippetsPane: View {
                 .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(Color.yellow.opacity(0.85))
             Text("snippets.json is broken — click to open; nothing is overwritten")
-                .font(.system(size: 10))
+                .font(.system(size: Theme.caption))
                 .foregroundStyle(Theme.secondary)
                 .lineLimit(1)
                 .truncationMode(.middle)
@@ -112,13 +112,13 @@ struct SnippetsPane: View {
             // which is the worst place for something that only looks like one.
             TextField(localized("Name"), text: $draftLabel)
                 .textFieldStyle(.plain)
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: Theme.footnote, weight: .medium))
                 .foregroundStyle(.white)
                 .tint(Theme.secondary)
                 .padding(.horizontal, 7)
                 .frame(width: 104, height: 20)
                 .background(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
                         .fill(Theme.surface)
                 )
                 .focused($focused, equals: .label)
@@ -126,13 +126,13 @@ struct SnippetsPane: View {
 
             TextField(localized("Text"), text: $draftText)
                 .textFieldStyle(.plain)
-                .font(.system(size: 11))
+                .font(.system(size: Theme.footnote))
                 .foregroundStyle(.white)
                 .tint(Theme.secondary)
                 .padding(.horizontal, 7)
                 .frame(height: 20)
                 .background(
-                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                    RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
                         .fill(Theme.surface)
                 )
                 .focused($focused, equals: .text)
@@ -158,7 +158,7 @@ struct SnippetsPane: View {
         .padding(.horizontal, 6)
         .frame(height: 28)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                 .fill(Theme.surfaceHover)
         )
         // Asked for here rather than where the editor is switched on: at that
@@ -216,7 +216,7 @@ struct SnippetsPane: View {
                     .foregroundStyle(Theme.tertiary)
                 if snippets.items.isEmpty, !isAdding {
                     Text("Nothing here yet — add with +")
-                        .font(.system(size: 10))
+                        .font(.system(size: Theme.caption))
                         .foregroundStyle(Theme.tertiary)
                 }
             }
@@ -270,6 +270,7 @@ private struct SnippetRow: View {
             if !editing {
                 Image(systemName: justCopied ? "checkmark" : item.symbol)
                 .font(.system(size: 10, weight: .medium))
+                    .contentTransition(.symbolEffect(.replace))
                     .foregroundStyle(justCopied ? Color.green : Theme.tertiary)
                     .frame(width: 14)
             }
@@ -285,13 +286,13 @@ private struct SnippetRow: View {
                 // read as text that had lost its alignment.
                 TextField(localized("Name"), text: $draftLabel)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: Theme.footnote, weight: .medium))
                     .foregroundStyle(.white)
                     .tint(Theme.secondary)
                     .padding(.horizontal, 7)
                     .frame(width: 104, height: 20)
                     .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
                             .fill(Theme.surface)
                     )
                     .focused($focus, equals: .label)
@@ -299,13 +300,13 @@ private struct SnippetRow: View {
 
                 TextField(localized("Text"), text: $draftText)
                     .textFieldStyle(.plain)
-                    .font(.system(size: 11))
+                    .font(.system(size: Theme.footnote))
                     .foregroundStyle(.white)
                     .tint(Theme.secondary)
                     .padding(.horizontal, 7)
                     .frame(height: 20)
                     .background(
-                        RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
                             .fill(Theme.surface)
                     )
                     .focused($focus, equals: .text)
@@ -328,7 +329,7 @@ private struct SnippetRow: View {
             } else {
                 if !item.label.isEmpty {
                     Text(item.label)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: Theme.footnote, weight: .medium))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                         .layoutPriority(1)
@@ -381,7 +382,7 @@ private struct SnippetRow: View {
         .padding(.horizontal, editing ? 6 : 9)
         .frame(height: editing ? 28 : 26)
         .background(
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                 .fill(editing || hovering ? Theme.surfaceHover : Theme.surface)
         )
         .contentShape(Rectangle())

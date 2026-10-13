@@ -8,11 +8,25 @@ struct NotchContentView: View {
     /// Watched on its own, like the counters below: the view model does not
     /// forward the timer, and the notice has to appear with the panel folded.
     @ObservedObject var alert: FocusAlert
+    /// Watched here for the same reason: it decides the folded notch's width.
+    @ObservedObject var activity: LiveActivity
 
     private var isOpen: Bool { panel.isActive }
     /// The folded notch grown sideways for the end-of-sprint notice.
     private var showsNotice: Bool { !isOpen && alert.current != nil }
-    private var size: CGSize { showsNotice ? panel.geometry.alertSize : panel.bodySize }
+    /// The timer or the song on the folded notch's sides. Only on a real
+    /// notch: a drawn one is transparent at rest, and a black pill standing
+    /// in the middle of an external display's menu bar for as long as music
+    /// plays would be the panel claiming a screen it was asked to stay out of.
+    private var activityKind: LiveActivity.Kind? {
+        guard !isOpen, alert.current == nil, panel.geometry.isPhysical else { return nil }
+        return activity.kind
+    }
+    private var size: CGSize {
+        if showsNotice { return panel.geometry.alertSize }
+        if activityKind != nil { return panel.geometry.activitySize }
+        return panel.bodySize
+    }
     private var topRadius: CGFloat { isOpen ? Theme.openTopRadius : Theme.collapsedTopRadius }
 
     var body: some View {
@@ -54,6 +68,7 @@ struct NotchContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .animation(Theme.openAnimation, value: isOpen)
         .animation(Theme.openAnimation, value: alert.current)
+        .animation(Theme.openAnimation, value: activityKind)
         .animation(Theme.paneAnimation, value: vm.tab)
     }
 
@@ -76,9 +91,14 @@ struct NotchContentView: View {
                     .frame(width: NotchGeometry.alertWing, alignment: .leading)
                     .transition(.opacity)
             }
+            if let kind = activityKind {
+                activityWing(kind) {
+                    LiveActivityWings.Leading(kind: kind, focus: vm.focus, media: vm.media)
+                }
+            }
             if isOpen {
                 Text(vm.tab.title.uppercased())
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: Theme.caption, weight: .semibold))
                     .tracking(0.8)
                     .foregroundStyle(Theme.tertiary)
                     .padding(.leading, 16)
@@ -93,6 +113,11 @@ struct NotchContentView: View {
                     .padding(.trailing, 16)
                     .transition(.opacity)
             }
+            if let kind = activityKind {
+                activityWing(kind) {
+                    LiveActivityWings.Trailing(kind: kind, focus: vm.focus, media: vm.media)
+                }
+            }
             if showsNotice {
                 FocusNotice.CloseButton(dismiss: alert.dismiss)
                     .padding(.trailing, 10)
@@ -101,6 +126,21 @@ struct NotchContentView: View {
             }
         }
         .frame(height: panel.geometry.notchSize.height)
+    }
+
+    /// One side of the folded notch's activity. A click on either side
+    /// opens the panel on the tab it came from, as a tap on the Dynamic
+    /// Island opens the app.
+    private func activityWing(_ kind: LiveActivity.Kind, @ViewBuilder content: () -> some View) -> some View {
+        Button {
+            panel.onActivate?(kind == .focus ? .focus : .media)
+        } label: {
+            content()
+                .frame(width: NotchGeometry.activityWing, height: panel.geometry.notchSize.height)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .transition(.opacity)
     }
 
     @ViewBuilder
@@ -112,7 +152,7 @@ struct NotchContentView: View {
                     EqualizerBars(isAnimating: vm.media.isPlaying)
                 }
                 Text(vm.media.sourceName ?? "")
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: Theme.caption, weight: .medium))
                     .foregroundStyle(Theme.tertiary)
             }
         case .shelf:
@@ -124,7 +164,7 @@ struct NotchContentView: View {
         case .calendar:
             if let next = vm.calendar.next {
                 Text(CalendarPane.countdown(to: next, from: vm.calendar.now))
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
                     .foregroundStyle(next.isRunning ? Color.white.opacity(0.8) : Theme.tertiary)
             }
         case .translate:
@@ -152,7 +192,8 @@ struct NotchContentView: View {
     private func counter(_ value: Int) -> some View {
         if value > 0 {
             Text("\(value)")
-                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
+                .rollingNumber(value)
                 .foregroundStyle(Theme.tertiary)
         }
     }
@@ -239,7 +280,8 @@ private struct NotesCounter: View {
     var body: some View {
         if !notes.notes.isEmpty {
             Text("\(notes.notes.count)")
-                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
+                .rollingNumber(notes.notes.count)
                 .foregroundStyle(Theme.tertiary)
         }
     }
@@ -254,7 +296,7 @@ private struct CurrencyRateDate: View {
     var body: some View {
         if let date = currencies.rateDate {
             Text(date)
-                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
                 .foregroundStyle(Theme.tertiary)
         }
     }
@@ -283,6 +325,7 @@ private struct Rail: View {
         VStack(spacing: NotchGeometry.railSpacing) {
             ForEach(tabs) { tab in
                 Button {
+                    if tab != vm.tab { Haptics.snap() }
                     panel.select(tab)
                 } label: {
                     Image(systemName: tab.symbol)
@@ -293,11 +336,11 @@ private struct Rail: View {
                         .font(.system(size: 14, weight: .medium))
                         .frame(width: 30, height: panel.geometry.railIconHeight)
                         .background(
-                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
                                 .fill(fill(for: tab))
                         )
                         .foregroundStyle(vm.tab == tab ? Color.white : Theme.tertiary)
-                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous))
                         // A render-time transform. Growing the frame instead
                         // would re-lay out the rail on every hover, and layout
                         // that runs on pointer movement is exactly the kind
@@ -328,6 +371,7 @@ private struct Rail: View {
             guard let hovered, hovered != vm.tab else { return }
             try? await Task.sleep(for: dwell)
             guard !Task.isCancelled else { return }
+            Haptics.snap()
             panel.select(hovered)
         }
     }
@@ -347,7 +391,8 @@ private struct FocusCounter: View {
     var body: some View {
         if timer.completedToday > 0 {
             Text("\(timer.completedToday)")
-                .font(.system(size: 10, weight: .medium).monospacedDigit())
+                .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
+                .rollingNumber(timer.completedToday)
                 .foregroundStyle(Theme.tertiary)
         }
     }
@@ -381,7 +426,7 @@ private struct FocusNotice: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(color)
                 Text(kind == .sprintEnded ? localized("Break") : localized("Back to work"))
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(.system(size: Theme.body, weight: .semibold))
                     .foregroundStyle(.white)
                     .lineLimit(1)
             }

@@ -53,17 +53,17 @@ struct SystemPane: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(color)
                 Text(name)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: Theme.footnote, weight: .medium))
                     .foregroundStyle(Theme.secondary)
                     .lineLimit(1)
                 Spacer(minLength: 4)
                 if let aside {
                     Text(aside)
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
+                        .font(.system(size: Theme.footnote, weight: .medium).monospacedDigit())
                         .foregroundStyle(Theme.tertiary)
                 }
                 Text(String(format: "%.1f%%", value))
-                    .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    .font(.system(size: Theme.headline, weight: .semibold).monospacedDigit())
                     .foregroundStyle(.white)
             }
             Sparkline(series: series, capacity: SystemLoad.historyLength, color: color)
@@ -71,7 +71,7 @@ struct SystemPane: View {
         .padding(10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: Theme.radiusL, style: .continuous)
                 .fill(Theme.surface)
         )
     }

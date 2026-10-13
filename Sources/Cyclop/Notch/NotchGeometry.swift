@@ -322,6 +322,16 @@ struct NotchGeometry {
         CGSize(width: notchSize.width + 2 * Self.alertWing, height: notchSize.height)
     }
 
+    /// How far the timer or the song reaches out on each side of the folded
+    /// notch: room for "89:59" on the right and a cover on the left, and no
+    /// more — this stays up for as long as the music plays, over menu bar
+    /// space that is somebody's.
+    static let activityWing: CGFloat = 52
+
+    var activitySize: CGSize {
+        CGSize(width: notchSize.width + 2 * Self.activityWing, height: notchSize.height)
+    }
+
     /// Hover target while collapsed, in global screen coordinates. Slightly
     /// taller than the notch so the panel opens just before the pointer lands.
     var hoverRect: CGRect {
