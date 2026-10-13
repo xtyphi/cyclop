@@ -28,9 +28,10 @@ struct ClipboardPane: View {
                 ScrollViewReader { proxy in
                     ScrollView(showsIndicators: false) {
                         LazyVStack(spacing: 3) {
-                            ForEach(rows) { item in
+                            ForEach(Array(rows.enumerated()), id: \.element.id) { index, item in
                                 ClipRow(
                                     item: item,
+                                    shortcut: index < 9 ? index + 1 : nil,
                                     isSelected: item.id == selected?.id,
                                     clipboard: clipboard,
                                     browser: browser,
@@ -191,6 +192,9 @@ private struct ClipRow: View {
     let item: ClipItem
     /// Where the arrow keys stand. Drawn like a hover, so the mouse and the
     /// keys point at rows the same way.
+    /// ⌘ and this number copy the row: the first nine of whatever the list
+    /// shows right now, search included.
+    let shortcut: Int?
     let isSelected: Bool
     @ObservedObject var clipboard: ClipboardStore
     let browser: ClipboardBrowser
@@ -243,6 +247,11 @@ private struct ClipRow: View {
                         .foregroundStyle(Theme.secondary)
                 }
                 .buttonStyle(.plain)
+            } else if let shortcut {
+                // Where the buttons go on hover, so the row keeps its width.
+                Text("⌘\(shortcut)")
+                    .font(.system(size: 10, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Theme.tertiary)
             }
         }
         .padding(.horizontal, 9)
