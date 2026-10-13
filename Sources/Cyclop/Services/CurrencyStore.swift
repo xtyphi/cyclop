@@ -228,9 +228,32 @@ final class CurrencyStore: ObservableObject {
         }
     }
 
+    /// Both hosts are asked unless the first already has today's table, and
+    /// the newer of the two wins. jsDelivr caches `@latest` for up to twelve
+    /// hours, so for most of a morning it hands out yesterday's file while
+    /// the Pages mirror already has today's: taking the first answer that
+    /// arrived is what left the header stuck a day behind.
     private func loadRates(for base: String) async throws {
         let code = base.lowercased()
-        let data = try await fetch("currencies/\(code).min.json")
+        var best: (date: String?, table: [String: Double])?
+        var lastError: Error?
+        for host in [Self.primaryHost, Self.fallbackHost] {
+            do {
+                let data = try await fetch("currencies/\(code).min.json", from: host)
+                let parsed = try Self.parseRates(data, base: code)
+                if best == nil || (parsed.date ?? "") > (best?.date ?? "") { best = parsed }
+                if parsed.date == Self.todayStamp() { break }
+            } catch {
+                lastError = error
+            }
+        }
+        guard let best else { throw lastError ?? URLError(.cannotConnectToHost) }
+        rates = best.table
+        rateBase = code
+        rateDate = best.date
+    }
+
+    private static func parseRates(_ data: Data, base code: String) throws -> (date: String?, table: [String: Double]) {
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let date = object?["date"] as? String
         let table = object?[code] as? [String: Any] ?? [:]
@@ -242,9 +265,7 @@ final class CurrencyStore: ObservableObject {
                 parsed[key.lowercased()] = number.doubleValue
             }
         }
-        rates = parsed
-        rateBase = code
-        rateDate = date
+        return (date, parsed)
     }
 
     /// Tries the jsDelivr CDN first, then the Cloudflare Pages mirror the
@@ -252,22 +273,26 @@ final class CurrencyStore: ObservableObject {
     private func fetch(_ endpoint: String) async throws -> Data {
         var lastError: Error?
         for host in [Self.primaryHost, Self.fallbackHost] {
-            guard let url = URL(string: "\(host)/\(endpoint)") else { continue }
-            var request = URLRequest(url: url)
-            request.cachePolicy = .reloadIgnoringLocalCacheData
-            request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-            request.setValue("no-cache", forHTTPHeaderField: "Pragma")
             do {
-                let (data, response) = try await session.data(for: request)
-                if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
-                    throw URLError(.badServerResponse)
-                }
-                return data
+                return try await fetch(endpoint, from: host)
             } catch {
                 lastError = error
             }
         }
         throw lastError ?? URLError(.cannotConnectToHost)
+    }
+
+    private func fetch(_ endpoint: String, from host: String) async throws -> Data {
+        guard let url = URL(string: "\(host)/\(endpoint)") else { throw URLError(.badURL) }
+        var request = URLRequest(url: url)
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        let (data, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw URLError(.badServerResponse)
+        }
+        return data
     }
 
     // MARK: - Conversion
