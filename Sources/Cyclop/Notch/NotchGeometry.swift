@@ -52,11 +52,12 @@ struct NotchGeometry {
     var tallExpandedSize: CGSize {
         CGSize(width: expandedSize.width, height: Self.tallBodyHeight)
     }
-    /// Body for the clipboard history: a third of the screen down, so a week
-    /// of copies shows more than six lines at a time. Same width as the rest,
-    /// for the same reason as the teleprompter.
+    /// Body for the clipboard history: 40 % of the screen down — a third
+    /// first, then a fifth more on request — so a week of copies shows a
+    /// dozen lines at a time. Same width as the rest, for the same reason as
+    /// the teleprompter.
     var clipboardExpandedSize: CGSize {
-        CGSize(width: expandedSize.width, height: max(expandedSize.height, (screen.frame.height / 3).rounded()))
+        CGSize(width: expandedSize.width, height: max(expandedSize.height, (screen.frame.height * 0.4).rounded()))
     }
 
     /// Tallest body any tab can ask for. The window is cut to this once and
