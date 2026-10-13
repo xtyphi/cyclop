@@ -199,7 +199,12 @@ struct NotchContentView: View {
         case .shelf:
             ShelfPane(shelf: vm.shelf, isTargeted: panel.isDropTargeted)
         case .clipboard:
-            ClipboardPane(clipboard: vm.clipboard, privacy: vm.privacy)
+            ClipboardPane(
+                clipboard: vm.clipboard,
+                browser: vm.clipboardBrowser,
+                privacy: vm.privacy,
+                wantsKeyboard: $panel.wantsKeyboard
+            )
         case .calendar:
             CalendarPane(calendar: vm.calendar, privacy: vm.privacy)
         case .snippets:

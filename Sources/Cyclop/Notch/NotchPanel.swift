@@ -71,7 +71,13 @@ final class NotchPanel: NSPanel {
     /// be noticed is here, where every event the window receives passes.
     var onPress: (() -> Void)?
 
+    /// Offered every key press before anything else sees it; true swallows
+    /// it. For the arrows, Return and Escape in the clipboard list, which a
+    /// focused search field would otherwise take as caret moves.
+    var onKey: ((NSEvent) -> Bool)?
+
     override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, onKey?(event) == true { return }
         if event.type == .keyDown, editingAction(for: event) != nil, perform(event) { return }
         // Before `super`, so the window is already key by the time the click
         // reaches the field and places a caret.

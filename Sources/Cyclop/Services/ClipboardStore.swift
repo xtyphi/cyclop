@@ -6,9 +6,28 @@ struct ClipItem: Identifiable, Equatable {
         case file(URL)
     }
 
-    let id = UUID()
+    var id = UUID()
     let payload: Payload
     let date: Date
+    /// The app that was in front when the copy was made — almost always the
+    /// one it was copied from. Shown in the enlarged view.
+    var app: String?
+
+    /// What a search is matched against: the whole text, or the file's path.
+    var searchable: String {
+        switch payload {
+        case .text(let string): return string
+        case .file(let url): return url.path
+        }
+    }
+
+    /// Everything, untrimmed, for the enlarged view.
+    var fullText: String {
+        switch payload {
+        case .text(let string): return string
+        case .file(let url): return url.path
+        }
+    }
 
     var preview: String {
         switch payload {
@@ -32,6 +51,33 @@ struct ClipItem: Identifiable, Equatable {
     static func == (lhs: ClipItem, rhs: ClipItem) -> Bool { lhs.payload == rhs.payload }
 }
 
+/// One line of the history file.
+private struct ClipRecord: Codable {
+    var id: UUID
+    var kind: String
+    var value: String
+    var date: Date
+    var app: String?
+
+    init(_ item: ClipItem) {
+        id = item.id
+        date = item.date
+        app = item.app
+        switch item.payload {
+        case .text(let string): kind = "text"; value = string
+        case .file(let url): kind = "file"; value = url.path
+        }
+    }
+
+    var item: ClipItem? {
+        switch kind {
+        case "text": return ClipItem(id: id, payload: .text(value), date: date, app: app)
+        case "file": return ClipItem(id: id, payload: .file(URL(fileURLWithPath: value)), date: date, app: app)
+        default: return nil
+        }
+    }
+}
+
 /// Polls the general pasteboard's change counter. Cheap: one integer read
 /// twice a second, and nothing at all is read until the counter moves.
 @MainActor
@@ -49,7 +95,19 @@ final class ClipboardStore: ObservableObject {
 
     private var timer: Timer?
     private var lastChangeCount = NSPasteboard.general.changeCount
-    private let limit = 40
+
+    /// A week back, as far as anyone goes looking for something copied. Kept
+    /// on disk, so a restart does not take the week with it.
+    static let retention: TimeInterval = 7 * 24 * 60 * 60
+    /// A ceiling under the week, for the week somebody copies a log line by
+    /// line: past it the oldest go first.
+    private let limit = 1000
+    private static let file = Support.file("clipboard.json")
+    private let saves = DebouncedWrite(after: 1.0)
+
+    init() {
+        load()
+    }
     /// Types an app sets to keep a copy out of history tools. Presence is what
     /// counts, not content: a type can be declared with data that is still on
     /// its way, and asking for the bytes would then answer nil for a password
@@ -63,6 +121,7 @@ final class ClipboardStore: ObservableObject {
 
     func start() {
         stop()
+        prune()
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
@@ -81,10 +140,17 @@ final class ClipboardStore: ObservableObject {
 
     func clear() {
         items.removeAll()
+        scheduleSave()
     }
 
     func remove(_ item: ClipItem) {
         items.removeAll { $0.id == item.id }
+        scheduleSave()
+    }
+
+    /// Writes whatever is waiting now. Called on quit.
+    func flush() {
+        saves.flush()
     }
 
     /// Puts an entry back on the pasteboard without re-recording it.
@@ -102,6 +168,7 @@ final class ClipboardStore: ObservableObject {
         if let index = items.firstIndex(where: { $0.id == item.id }), index != 0 {
             items.remove(at: index)
             items.insert(item, at: 0)
+            scheduleSave()
         }
     }
 
@@ -119,7 +186,7 @@ final class ClipboardStore: ObservableObject {
         let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true]
         if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL],
            let url = urls.first {
-            record(ClipItem(payload: .file(url), date: Date()))
+            record(ClipItem(payload: .file(url), date: Date(), app: Self.frontApp))
             return
         }
 
@@ -143,7 +210,7 @@ final class ClipboardStore: ObservableObject {
 
         guard let string = pasteboard.string(forType: .string),
               !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        record(ClipItem(payload: .text(string), date: Date()))
+        record(ClipItem(payload: .text(string), date: Date(), app: Self.frontApp))
     }
 
     /// Checks back until the promised picture has actually arrived.
@@ -161,7 +228,7 @@ final class ClipboardStore: ObservableObject {
             guard pasteboard.changeCount == changeCount,
                   let string = pasteboard.string(forType: .string),
                   !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-            record(ClipItem(payload: .text(string), date: Date()))
+            record(ClipItem(payload: .text(string), date: Date(), app: Self.frontApp))
             return
         }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
@@ -186,9 +253,146 @@ final class ClipboardStore: ObservableObject {
         return rep.representation(using: .png, properties: [:])
     }
 
+    private static var frontApp: String? {
+        NSWorkspace.shared.frontmostApplication?.localizedName
+    }
+
     private func record(_ item: ClipItem) {
         items.removeAll { $0 == item }
         items.insert(item, at: 0)
         if items.count > limit { items.removeLast(items.count - limit) }
+        prune()
+        scheduleSave()
+    }
+
+    // MARK: - History file
+
+    /// Drops what is older than the week. Run on start and on every copy, so
+    /// a Mac left on for a fortnight still lets the old ones go.
+    private func prune() {
+        let cutoff = Date().addingTimeInterval(-Self.retention)
+        let kept = items.filter { $0.date >= cutoff }
+        guard kept.count != items.count else { return }
+        items = kept
+        scheduleSave()
+    }
+
+    private func load() {
+        guard let data = try? Data(contentsOf: Self.file),
+              let records = try? JSONDecoder().decode([ClipRecord].self, from: data)
+        else { return }
+        let cutoff = Date().addingTimeInterval(-Self.retention)
+        items = Array(records.compactMap(\.item).filter { $0.date >= cutoff }.prefix(limit))
+    }
+
+    private func scheduleSave() {
+        saves.schedule { [weak self] in self?.save() }
+    }
+
+    /// Readable by this user only: copies include things nobody else on the
+    /// Mac should be able to open — the password managers that mark theirs
+    /// are skipped, the rest of what passes through cannot be told apart.
+    private func save() {
+        guard let data = try? JSONEncoder().encode(items.map(ClipRecord.init)) else { return }
+        try? data.write(to: Self.file, options: .atomic)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: Self.file.path)
+    }
+}
+
+/// Search, keyboard selection and the enlarged view over the history.
+///
+/// Apart from the store on purpose: the view model redraws the whole panel
+/// whenever the store changes, and a query typed letter by letter would
+/// redraw it on every keystroke.
+@MainActor
+final class ClipboardBrowser: ObservableObject {
+    enum Key { case up, down, enter, escape, right, left }
+    enum Outcome { case ignored, handled, close }
+
+    @Published var query = "" {
+        didSet {
+            guard query != oldValue else { return }
+            selectedID = nil
+            previewing = false
+        }
+    }
+    @Published var selectedID: UUID?
+    @Published var previewing = false
+    /// The row the arrow keys just moved to. Separate from the selection,
+    /// which the mouse moves too: scrolling to a row because the pointer
+    /// rested on it would slide the list out from under the pointer.
+    @Published private(set) var scrollTarget: UUID?
+
+    let store: ClipboardStore
+    /// Whether a row is under the privacy cover. A covered row is not opened
+    /// large: that would uncover it without the eye being pressed.
+    var isHidden: (ClipItem) -> Bool = { _ in false }
+
+    init(store: ClipboardStore) {
+        self.store = store
+    }
+
+    var visible: [ClipItem] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !q.isEmpty else { return store.items }
+        return store.items.filter {
+            $0.searchable.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+        }
+    }
+
+    /// The chosen row, or the newest one until something is chosen — so
+    /// Return straight after opening takes the last copy, as it would in any
+    /// clipboard manager.
+    var selected: ClipItem? {
+        let rows = visible
+        return rows.first { $0.id == selectedID } ?? rows.first
+    }
+
+    /// Back to a blank search at the top of the list.
+    func reset() {
+        query = ""
+        selectedID = nil
+        previewing = false
+    }
+
+    private func move(to id: UUID) {
+        selectedID = id
+        scrollTarget = id
+    }
+
+    func handle(_ key: Key) -> Outcome {
+        let rows = visible
+        let index = selected.flatMap { item in rows.firstIndex { $0.id == item.id } }
+        switch key {
+        case .up:
+            if let index, index > 0 { move(to: rows[index - 1].id) }
+            return .handled
+        case .down:
+            if let index, index + 1 < rows.count { move(to: rows[index + 1].id) }
+            return .handled
+        case .right:
+            if let item = selected, !isHidden(item) { previewing = true }
+            return .handled
+        case .left:
+            guard previewing else { return .ignored }
+            previewing = false
+            return .handled
+        case .enter:
+            guard let item = selected else { return .handled }
+            store.copy(item)
+            reset()
+            return .close
+        case .escape:
+            if previewing {
+                previewing = false
+                return .handled
+            }
+            if !query.isEmpty {
+                query = ""
+                return .handled
+            }
+            reset()
+            return .close
+        }
     }
 }

@@ -48,7 +48,7 @@ final class NotchViewModel: ObservableObject {
         /// Tabs with a field in them. Landing on one hands it the keyboard, so
         /// that arriving and typing is a single move.
         var needsKeyboard: Bool {
-            self == .translate || self == .currency || self == .snippets || self == .notes
+            self == .translate || self == .currency || self == .snippets || self == .notes || self == .clipboard
         }
 
         /// Every tab can be taken off the rail except the one the switches
@@ -274,6 +274,8 @@ final class NotchViewModel: ObservableObject {
     let media: MediaController
     let shelf: ShelfStore
     let clipboard: ClipboardStore
+    /// Search, arrow-key selection and the enlarged view over the history.
+    let clipboardBrowser: ClipboardBrowser
     let screenshotFolder: ScreenshotFolderWatcher
     let calendar: CalendarStore
     let translator: Translator
@@ -294,6 +296,7 @@ final class NotchViewModel: ObservableObject {
         self.media = MediaController()
         self.shelf = ShelfStore()
         self.clipboard = ClipboardStore()
+        self.clipboardBrowser = ClipboardBrowser(store: clipboard)
         self.screenshotFolder = ScreenshotFolderWatcher()
         self.calendar = CalendarStore()
         self.translator = Translator()
@@ -372,6 +375,9 @@ final class NotchViewModel: ObservableObject {
         // to PNG in full just to be dropped on this doorstep — pure heat on
         // exactly the machines whose owners turned the feature off.
         clipboard.wantsImages = { Self.saveClipboardImagesEnabled }
+        clipboardBrowser.isHidden = { [weak self] item in
+            self?.privacy.hides(.clipboard, item.id.uuidString) ?? false
+        }
         clipboard.onImage = { [weak self] png in
             guard let self, let url = ScreenshotVault.save(png) else { return }
             self.receivedScreenshot(at: url)
@@ -396,6 +402,7 @@ final class NotchViewModel: ObservableObject {
         for target in Tab.allCases { stopBackground(of: target) }
         // Whatever was typed makes it to disk even when quitting mid-thought.
         notes.flush()
+        clipboard.flush()
     }
 
     /// A screenshot that arrived on its own — copied elsewhere, or synced

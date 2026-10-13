@@ -167,3 +167,6 @@
 "This week" = "Эта неделя";
 "Total: %d" = "Всего: %d";
 "Sign in again: run claude in Terminal, then /login" = "Войдите заново: claude в Терминале, затем /login";
+"Nothing found" = "Ничего не найдено";
+"Open large" = "Открыть крупно";
+"Search" = "Поиск";

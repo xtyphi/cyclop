@@ -57,6 +57,18 @@ final class NotchController {
         target()?.toggle()
     }
 
+    /// The clipboard shortcut, on the display the pointer is on.
+    func summonClipboard() {
+        guard let vm, vm.isVisible(.clipboard) else { return }
+        // Another screen still holding the history from a previous press
+        // lets go first: one list taking the keyboard at a time.
+        let screen = target()
+        for panel in panels.values where panel !== screen && panel.isSummoned {
+            panel.summon(.clipboard)
+        }
+        screen?.summon(.clipboard)
+    }
+
     /// What the menu bar switches. Handed out rather than wrapped: the menu
     /// reads four sections and writes them one at a time, and a controller
     /// method per section would be four methods that only forward.

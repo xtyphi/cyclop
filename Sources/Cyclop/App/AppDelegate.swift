@@ -1,8 +1,10 @@
 import AppKit
+import Carbon.HIToolbox
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var controller: NotchController?
+    private var clipboardHotKey: GlobalHotKey?
     private var statusItem: NSStatusItem?
     private var privacyItem: NSMenuItem?
     private var privacyAllItem: NSMenuItem?
@@ -12,6 +14,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller = NotchController()
         controller?.install()
         installStatusItem()
+        // ⌥⇧C, the clipboard history: the keys the owner already presses for it.
+        clipboardHotKey = GlobalHotKey(keyCode: kVK_ANSI_C, modifiers: optionKey | shiftKey) { [weak self] in
+            self?.controller?.summonClipboard()
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

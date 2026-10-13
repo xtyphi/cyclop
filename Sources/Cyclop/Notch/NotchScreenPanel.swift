@@ -22,6 +22,12 @@ final class NotchScreenPanel {
     /// `NotchController.updatePin` for why it is granted to a single screen.
     var isPinned = false
 
+    /// Opened by the clipboard shortcut rather than by the pointer. Held open
+    /// with the pointer anywhere, because the shortcut is pressed with the
+    /// mouse wherever it happens to be; let go of when the keyboard is —
+    /// Escape, Return, or a click into another app.
+    private(set) var isSummoned = false
+
     private let vm: NotchViewModel
     private let pointer = PointerWatcher()
     private var panel: NotchPanel?
@@ -126,6 +132,10 @@ final class NotchScreenPanel {
 
         // Clicking away drops the keyboard but leaves the tab where it was, so
         // a click back into the panel has to be able to ask for it again.
+        panel.onKey = { [weak self] event in
+            self?.handleKey(event) ?? false
+        }
+
         panel.onPress = { [weak self] in
             // A click on the folded notch can only be a click on the focus
             // notice: it closes the notice, and must not open a typing tab.
@@ -249,8 +259,53 @@ final class NotchScreenPanel {
 
     // MARK: - Open / close
 
-    /// Whether this screen is the one a running script is pinning open.
-    private var holdsOpen: Bool { isPinned && vm.holdsOpen }
+    /// Whether something other than the pointer holds this screen open: a
+    /// running script, or the clipboard shortcut.
+    private var holdsOpen: Bool { (isPinned && vm.holdsOpen) || isSummoned }
+
+    /// The clipboard shortcut: the history, open, with the caret in search.
+    /// Pressed again while it is up, it closes it.
+    func summon(_ tab: NotchViewModel.Tab) {
+        if isSummoned, state.isOpen {
+            dismissSummoned()
+            return
+        }
+        vm.clipboardBrowser.reset()
+        vm.tab = tab
+        isSummoned = true
+        state.wantsKeyboard = true
+    }
+
+    private func dismissSummoned() {
+        isSummoned = false
+        state.onDismiss?()
+    }
+
+    /// Arrows, Return and Escape for the clipboard list. Only those keys, only
+    /// unmodified, and only while the list is what is on screen — everything
+    /// else carries on to the search field as typing.
+    private func handleKey(_ event: NSEvent) -> Bool {
+        guard state.isOpen, vm.tab == .clipboard else { return false }
+        let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        guard flags.isEmpty else { return false }
+        let key: ClipboardBrowser.Key
+        switch Int(event.keyCode) {
+        case 126: key = .up
+        case 125: key = .down
+        case 124: key = .right
+        case 123: key = .left
+        case 36, 76: key = .enter
+        case 53: key = .escape
+        default: return false
+        }
+        switch vm.clipboardBrowser.handle(key) {
+        case .ignored: return false
+        case .handled: return true
+        case .close:
+            dismissSummoned()
+            return true
+        }
+    }
 
     /// Hands the keyboard to the panel, or gives it back.
     private func setKeyboard(_ wants: Bool) {
@@ -259,6 +314,9 @@ final class NotchScreenPanel {
             pointer.setInside(true)
         }
         panel?.acceptsKeyboard = wants
+        // The shortcut's hold is a hold on the keyboard: once that is gone —
+        // a click into another app, most often — the pointer decides again.
+        if !wants { isSummoned = false }
         // What was typed stays: clicking away to look something up should not
         // be the same as throwing the text out. Esc and the ✕ do that.
         if !wants {
@@ -293,6 +351,7 @@ final class NotchScreenPanel {
         // a consequence of the script moving, so the script stops with the
         // panel it is moving on — and not with any other panel folding away.
         if !open, isPinned { vm.teleprompter.suspend() }
+        if !open { isSummoned = false }
         openGeneration += 1
         closeActiveRectWork?.cancel()
 
