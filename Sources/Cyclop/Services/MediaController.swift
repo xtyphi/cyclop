@@ -157,7 +157,12 @@ final class MediaController: ObservableObject {
         let switched = track?.key != key
         track = Track(title: snapshot.title, artist: snapshot.artist, album: snapshot.album, key: key)
         if switched, feedAvailable { feed.refresh() }
-        isPlaying = snapshot.isPlaying || snapshot.rate > 0
+        // The system's own answer, and nothing else. The rate looks like a
+        // second witness but is not one: Telegram keeps reporting its speed
+        // setting — 1.5 for a voice message at 1.5× — straight through a
+        // pause, and reading that as playing kept the notch's equalizer going
+        // over silence. Control Center goes by the flag alone too.
+        isPlaying = snapshot.isPlaying
         duration = snapshot.duration
         sourceName = snapshot.source
         sourcePID = snapshot.sourcePID
@@ -224,6 +229,33 @@ final class MediaController: ObservableObject {
     }
 
     // MARK: - Source
+
+    /// The icon of the app the sound is coming from — Spotify, the browser,
+    /// Telegram. Redrawn with `canRevealSource`, which changes whenever the
+    /// source does.
+    var sourceIcon: NSImage? { runningSource?.icon }
+
+    /// Players whose artwork is an album cover. Everything else — a browser,
+    /// Telegram, a video player — sends a thumbnail or nothing, and is
+    /// better told apart by its own icon.
+    private static let musicPlayers: Set<String> = [
+        "com.spotify.client",
+        "com.apple.Music",
+        "com.apple.iTunes",
+        "ru.yandex.desktop.music",
+        "ru.yandex.music",
+        "com.tidal.desktop",
+        "com.deezer.deezer-desktop",
+        "com.coppertino.Vox",
+        "com.apple.podcasts",
+    ]
+
+    /// True when the sound is music from a music player: then the cover says
+    /// more than the icon of the app it came from.
+    var isMusicPlayer: Bool {
+        guard let id = runningSource?.bundleIdentifier else { return false }
+        return Self.musicPlayers.contains(id)
+    }
 
     private var runningSource: NSRunningApplication? {
         sourcePID.flatMap { NSRunningApplication(processIdentifier: $0) }
@@ -307,7 +339,8 @@ final class MediaController: ObservableObject {
     /// So the reading is aged by the clock that came with it. A paused session
     /// is left alone — its reading is not moving and there is nothing to add.
     private func reportedPosition(from snapshot: NowPlayingFeed.Snapshot) -> TimeInterval {
-        guard snapshot.isPlaying || snapshot.rate > 0, let takenAt = snapshot.takenAt else {
+        // Paused, the clock stands still whatever rate is reported (see `apply`).
+        guard snapshot.isPlaying, let takenAt = snapshot.takenAt else {
             return snapshot.elapsed
         }
         let since = Date().timeIntervalSince(takenAt)

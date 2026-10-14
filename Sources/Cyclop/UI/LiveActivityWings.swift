@@ -28,21 +28,30 @@ enum LiveActivityWings {
                     .foregroundStyle(LiveActivityWings.tint(for: focus.phase))
                     .contentTransition(.symbolEffect(.replace))
             case .media:
-                Group {
-                    if let artwork = media.artwork {
-                        Image(nsImage: artwork)
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } else {
-                        Image(systemName: "music.note")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Theme.secondary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .background(Theme.surfaceHover)
-                    }
+                // Music shows its cover; anything else — a voice message in
+                // Telegram, a video in a browser — the icon of the app it is
+                // playing in, which says more there than a thumbnail would.
+                if media.isMusicPlayer, let artwork = media.artwork {
+                    Image(nsImage: artwork)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: 22, height: 22)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous))
+                } else if let icon = media.sourceIcon {
+                    Image(nsImage: icon)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 22, height: 22)
+                } else {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.secondary)
+                        .frame(width: 22, height: 22)
+                        .background(
+                            RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
+                                .fill(Theme.surfaceHover)
+                        )
                 }
-                .frame(width: 22, height: 22)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous))
             }
         }
 
@@ -72,7 +81,7 @@ enum LiveActivityWings {
                         .rollingNumber(text, countsDown: true)
                 }
             case .media:
-                EqualizerBars(isAnimating: media.isPlaying, color: Color.white.opacity(0.85))
+                EqualizerBars(isAnimating: media.isPlaying, color: Color.white.opacity(0.9), height: 16)
             }
         }
 
