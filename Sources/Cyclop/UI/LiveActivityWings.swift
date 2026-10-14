@@ -28,30 +28,49 @@ enum LiveActivityWings {
                     .foregroundStyle(LiveActivityWings.tint(for: focus.phase))
                     .contentTransition(.symbolEffect(.replace))
             case .media:
-                // Music shows its cover; anything else — a voice message in
-                // Telegram, a video in a browser — the icon of the app it is
-                // playing in, which says more there than a thumbnail would.
-                if media.isMusicPlayer, let artwork = media.artwork {
-                    Image(nsImage: artwork)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 22, height: 22)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous))
-                } else if let icon = media.sourceIcon {
-                    Image(nsImage: icon)
-                        .resizable()
-                        .aspectRatio(contentMode: .fit)
-                        .frame(width: 22, height: 22)
-                } else {
-                    Image(systemName: "music.note")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Theme.secondary)
-                        .frame(width: 22, height: 22)
-                        .background(
-                            RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
-                                .fill(Theme.surfaceHover)
-                        )
+                // Swapped as one piece, scaling through a cross-fade, when the
+                // source or the cover changes — Telegram's icon giving way to
+                // Spotify's cover used to cut over in a single frame.
+                ZStack {
+                    mediaGlyph
+                        .id(glyphID)
+                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
                 }
+                .animation(.spring(response: 0.38, dampingFraction: 0.86), value: glyphID)
+            }
+        }
+
+        /// What the glyph shows: this track's cover, or this app's icon.
+        private var glyphID: String {
+            if media.isMusicPlayer, media.artwork != nil { return "cover:\(media.track?.key ?? "")" }
+            return "app:\(media.sourcePID ?? 0)"
+        }
+
+        @ViewBuilder
+        private var mediaGlyph: some View {
+            // Music shows its cover; anything else — a voice message in
+            // Telegram, a video in a browser — the icon of the app it is
+            // playing in, which says more there than a thumbnail would.
+            if media.isMusicPlayer, let artwork = media.artwork {
+                Image(nsImage: artwork)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: 22, height: 22)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous))
+            } else if let icon = media.sourceIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 22, height: 22)
+            } else {
+                Image(systemName: "music.note")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(
+                        RoundedRectangle(cornerRadius: Theme.radiusS, style: .continuous)
+                            .fill(Theme.surfaceHover)
+                    )
             }
         }
 

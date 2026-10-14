@@ -32,7 +32,7 @@ final class MediaController: ObservableObject {
     /// owner has since quit leaves its name on screen but nothing to raise.
     @Published private(set) var canRevealSource = false
 
-    private var sourcePID: pid_t? {
+    private(set) var sourcePID: pid_t? {
         didSet { canRevealSource = runningSource != nil }
     }
 
