@@ -3,8 +3,9 @@ import AudioToolbox
 import CoreAudio
 import Foundation
 import os
+import simd
 
-/// How loud six bands of whatever the Mac is playing are right now, from
+/// How loud seven bands of whatever the Mac is playing are right now, from
 /// the bass up — what makes the equalizer bars move with the music instead
 /// of breathing on a loop.
 ///
@@ -25,7 +26,7 @@ final class AudioLevels: @unchecked Sendable {
     static let shared = AudioLevels()
 
     /// How many bands the sound is split into.
-    static let bandCount = 6
+    static let bandCount = 7
 
     /// Band levels, bass first, each 0…1; lanes past `bandCount` stay 0. A
     /// vector rather than an array: it is written on the audio thread, and
@@ -34,6 +35,7 @@ final class AudioLevels: @unchecked Sendable {
 
     private struct Shared {
         var bands = Bands(repeating: 0)
+        var caps = Bands(repeating: 0)
         var lastSound = Date.distantPast
     }
 
@@ -47,6 +49,11 @@ final class AudioLevels: @unchecked Sendable {
 
     /// The latest levels.
     var bands: Bands { shared.withLock { $0.bands } }
+
+    /// Where each band's recent peak is: it rises with the band and falls
+    /// back slowly on its own, the little caps a spectrum display leaves
+    /// above its bars.
+    var caps: Bands { shared.withLock { $0.caps } }
 
     /// True while there has been sound in the last second and a half. False
     /// with the permission refused, with nothing playing, or before the tap
@@ -91,9 +98,10 @@ final class AudioLevels: @unchecked Sendable {
         }
     }
 
-    fileprivate func publish(_ bands: Bands, loud: Bool) {
+    fileprivate func publish(_ bands: Bands, caps: Bands, loud: Bool) {
         shared.withLock {
             $0.bands = bands
+            $0.caps = caps
             if loud { $0.lastSound = Date() }
         }
     }
@@ -256,6 +264,7 @@ private final class Analyzer: @unchecked Sendable {
     /// song, so a quiet track moves them as much as a loud one.
     private var peaks = AudioLevels.Bands(repeating: 1e-6)
     private var shown = AudioLevels.Bands(repeating: 0)
+    private var caps = AudioLevels.Bands(repeating: 0)
 
     init(levels: AudioLevels, sampleRate: Double, channels: Int) {
         self.levels = levels
@@ -332,6 +341,10 @@ private final class Analyzer: @unchecked Sendable {
             let ease: Float = level > shown[index] ? 0.55 : 0.12
             shown[index] += (level - shown[index]) * ease
         }
-        levels?.publish(shown, loud: loud)
+        // A cap falls about a full height a second, readings come ~94 times
+        // one: slow enough to read as weight, quick enough to catch the
+        // next beat.
+        caps = simd_max(shown, caps - 0.011)
+        levels?.publish(shown, caps: caps, loud: loud)
     }
 }

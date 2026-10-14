@@ -40,7 +40,30 @@ final class MediaController: ObservableObject {
     private var feedAvailable = true
 
     private var activeApp: PlayerApp?
+    /// A scriptable player shown in place of the system's choice. macOS names
+    /// one app as playing — the last to claim it — and keeps naming it after
+    /// it pauses: start a Telegram voice message over Spotify, pause it, and
+    /// the system goes on reporting a paused Telegram while Spotify plays.
+    /// While the system's pick is paused and Spotify or Music is playing,
+    /// that player is shown, and the buttons go to it.
+    private var overrideApp: PlayerApp?
+    /// Bumped whenever something plays through the system, so a player check
+    /// still out then does not override it on its way back.
+    private var overrideCheck = 0
+    /// A player check is out; later answers wait for it instead of starting
+    /// their own. Restarting on every answer starved the check outright when
+    /// the scripts took longer than the feed's next answer.
+    private var overrideChecking = false
+    /// The newest answer from the feed, which a returning check judges.
+    private var latestSnapshot: NowPlayingFeed.Snapshot?
+    /// What the focus chime paused, so it resumes that and nothing else: the
+    /// system's pick can change during the chime.
+    private var alertPaused: (override: PlayerApp?, pid: pid_t?)?
+    private var overrideObservers: [Any] = []
     private var artworkKey: String?
+    /// The track a missing cover was already asked for again, so a source
+    /// that has none (a voice message) is asked once, not on every update.
+    private var artworkRetryKey: String?
     private var anchor: (position: TimeInterval, at: Date)?
     /// Where we asked the player to jump, and when — see `apply`.
     private var pendingSeek: (target: TimeInterval, at: Date)?
@@ -55,12 +78,25 @@ final class MediaController: ObservableObject {
         feed.onUpdate = { [weak self] snapshot in self?.apply(snapshot) }
         feed.onUnavailable = { [weak self] in self?.switchToScriptingFallback() }
         feed.start()
+
+        // Spotify and Music announce their own changes. Listened to only to
+        // keep an overriding player current — the feed covers the rest.
+        let center = DistributedNotificationCenter.default()
+        for app in PlayerApp.allCases {
+            overrideObservers.append(center.addObserver(
+                forName: app.changeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.refreshOverride() }
+            })
+        }
     }
 
     func stop() {
         feed.stop()
-        observers.forEach { DistributedNotificationCenter.default().removeObserver($0) }
+        (observers + overrideObservers).forEach { DistributedNotificationCenter.default().removeObserver($0) }
         observers.removeAll()
+        overrideObservers.removeAll()
+        overrideApp = nil
         ticker?.invalidate()
         ticker = nil
     }
@@ -98,6 +134,7 @@ final class MediaController: ObservableObject {
     /// so that only music it stopped is started again afterwards.
     func pauseIfPlaying() -> Bool {
         guard track != nil, isPlaying else { return false }
+        alertPaused = (overrideApp, sourcePID)
         togglePlayPause()
         return true
     }
@@ -105,7 +142,10 @@ final class MediaController: ObservableObject {
     /// The other half. Skipped if something already started it again in the
     /// meantime — the user, or the player itself.
     func resumeIfPaused() {
-        guard track != nil, !isPlaying else { return }
+        let paused = alertPaused
+        alertPaused = nil
+        guard track != nil, !isPlaying,
+              let paused, paused.override == overrideApp, paused.pid == sourcePID else { return }
         togglePlayPause()
     }
 
@@ -122,7 +162,9 @@ final class MediaController: ObservableObject {
         let clamped = min(max(0, seconds), duration)
         setAnchor(clamped)
         pendingSeek = (clamped, Date())
-        if feedAvailable {
+        if let overrideApp {
+            PlayerBridge.seek(overrideApp, to: clamped)
+        } else if feedAvailable {
             feed.seek(to: clamped)
         } else if let activeApp {
             PlayerBridge.seek(activeApp, to: clamped)
@@ -134,7 +176,11 @@ final class MediaController: ObservableObject {
         script: (PlayerApp) -> Void,
         key: PlayerBridge.MediaKey
     ) {
-        if feedAvailable {
+        // The system's active player is not the one on screen, so a command
+        // through the feed would reach the paused one.
+        if let overrideApp {
+            script(overrideApp)
+        } else if feedAvailable {
             feed.send(command)
         } else if let activeApp {
             script(activeApp)
@@ -146,6 +192,54 @@ final class MediaController: ObservableObject {
     // MARK: - Feed
 
     private func apply(_ snapshot: NowPlayingFeed.Snapshot) {
+        latestSnapshot = snapshot
+        guard !snapshot.isPlaying, PlayerApp.allCases.contains(where: \.isRunning) else {
+            overrideCheck += 1
+            overrideApp = nil
+            return applyFeed(snapshot)
+        }
+        // Once shown, the player stays shown until something plays through the
+        // system again — pausing it from the panel must not hand the screen
+        // back to the voice message paused ten minutes ago.
+        if overrideApp != nil { return refreshOverride() }
+        // The system's pick is paused, or there is none: is a scriptable
+        // player playing on its own? Asked before anything is shown, so a
+        // paused voice message does not flash up on its way out.
+        guard !overrideChecking else { return }
+        overrideChecking = true
+        let check = overrideCheck
+        PlayerBridge.currentState { [weak self] state in
+            guard let self else { return }
+            self.overrideChecking = false
+            guard check == self.overrideCheck, let snapshot = self.latestSnapshot else { return }
+            if snapshot.isPlaying { return self.applyFeed(snapshot) }
+            let source = snapshot.sourcePID.flatMap { NSRunningApplication(processIdentifier: $0)?.bundleIdentifier }
+            if let state, state.isPlaying, state.app.bundleID != source {
+                self.overrideApp = state.app
+                self.adoptScripted(state)
+            } else {
+                self.overrideApp = nil
+                self.applyFeed(snapshot)
+            }
+        }
+    }
+
+    /// An overriding player changed — paused, skipped, resumed. Gone, it
+    /// stops overriding and the system's own pick is asked for again.
+    private func refreshOverride() {
+        guard feedAvailable, let app = overrideApp else { return }
+        PlayerBridge.state(of: app) { [weak self] state in
+            guard let self, self.overrideApp == app else { return }
+            if let state {
+                self.adoptScripted(state)
+            } else {
+                self.overrideApp = nil
+                self.feed.refresh()
+            }
+        }
+    }
+
+    private func applyFeed(_ snapshot: NowPlayingFeed.Snapshot) {
         guard !snapshot.isEmpty else { return clear() }
 
         let key = "\(snapshot.title)|\(snapshot.artist)|\(snapshot.album)"
@@ -195,6 +289,17 @@ final class MediaController: ObservableObject {
             // covers the gap until the system publishes the new cover.
             artworkKey = key
             artwork = nil
+        }
+
+        // Still no cover a moment later: ask for it outright. The helper sends
+        // a cover once per track, so one that got lost on the way never came
+        // back by itself — the panel sat on the skeleton until the next song.
+        if artwork == nil, snapshot.artwork == nil, artworkRetryKey != key {
+            artworkRetryKey = key
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+                guard let self, self.artwork == nil, self.track?.key == key, self.overrideApp == nil else { return }
+                self.feed.refreshArtwork()
+            }
         }
     }
 
@@ -278,6 +383,9 @@ final class MediaController: ObservableObject {
     private func switchToScriptingFallback() {
         guard feedAvailable else { return }
         feedAvailable = false
+        // The scripting route has its own idea of the active player.
+        overrideApp = nil
+        overrideCheck += 1
         // Nothing reports supported commands on this route, and the two apps it
         // drives both skip — so the arrows come back rather than staying dim
         // on a state no longer being refreshed.
@@ -302,25 +410,32 @@ final class MediaController: ObservableObject {
         PlayerBridge.currentState { [weak self] state in
             guard let self else { return }
             guard let state else { return self.clear() }
+            self.adoptScripted(state)
+        }
+    }
 
-            self.activeApp = state.app
-            self.sourceName = state.app.displayName
-            self.sourcePID = NSRunningApplication
-                .runningApplications(withBundleIdentifier: state.app.bundleID).first?
-                .processIdentifier
-            self.track = Track(title: state.title, artist: state.artist, album: state.album, key: state.key)
-            self.isPlaying = state.isPlaying
-            self.duration = state.duration
-            self.adopt(state.position)
-            self.updateTicker()
+    /// Shows a player's state as read by script: the whole of the fallback
+    /// route, and the overriding player on the feed's.
+    private func adoptScripted(_ state: PlayerState) {
+        activeApp = state.app
+        // Spotify and Music both skip; nothing on this route says otherwise.
+        canSkip = true
+        sourceName = state.app.displayName
+        sourcePID = NSRunningApplication
+            .runningApplications(withBundleIdentifier: state.app.bundleID).first?
+            .processIdentifier
+        track = Track(title: state.title, artist: state.artist, album: state.album, key: state.key)
+        isPlaying = state.isPlaying
+        duration = state.duration
+        adopt(state.position)
+        updateTicker()
 
-            guard self.artworkKey != state.key else { return }
-            self.artworkKey = state.key
-            self.artwork = nil
-            PlayerBridge.artwork(for: state) { [weak self] image in
-                guard let self, self.artworkKey == state.key else { return }
-                self.artwork = image
-            }
+        guard artworkKey != state.key else { return }
+        artworkKey = state.key
+        artwork = nil
+        PlayerBridge.artwork(for: state) { [weak self] image in
+            guard let self, self.artworkKey == state.key else { return }
+            artwork = image
         }
     }
 

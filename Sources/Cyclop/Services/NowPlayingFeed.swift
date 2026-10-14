@@ -96,7 +96,10 @@ final class NowPlayingFeed {
         output.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let chunk = handle.availableData
             guard !chunk.isEmpty else { return }
-            Task { @MainActor in self?.consume(chunk) }
+            // `DispatchQueue.main`, not a `Task`: a cover is a quarter of a
+            // megabyte and arrives in several chunks, and only the queue
+            // promises they are put back together in the order they came.
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.consume(chunk) } }
         }
 
         task.terminationHandler = { [weak self] _ in
@@ -132,6 +135,8 @@ final class NowPlayingFeed {
     // MARK: - Commands
 
     func refresh() { write("get") }
+    /// The current record again, artwork included even if it went out before.
+    func refreshArtwork() { write("art") }
     func send(_ command: Command) { write("cmd \(command.rawValue)") }
     func seek(to seconds: TimeInterval) { write("seek \(Int(seconds))") }
 
@@ -181,7 +186,10 @@ final class NowPlayingFeed {
     }
 
     private func handle(line: Data) {
-        guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else { return }
+        guard let object = try? JSONSerialization.jsonObject(with: line) as? [String: Any] else {
+            NSLog("Cyclop: unreadable Now Playing line, %d bytes", line.count)
+            return
+        }
         if object["error"] != nil {
             // The helper just said it cannot work at all. Left alone, its perl
             // host would idle in the sleep loop for the rest of the app's life,

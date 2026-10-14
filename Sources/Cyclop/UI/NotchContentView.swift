@@ -92,7 +92,7 @@ struct NotchContentView: View {
                     .transition(.opacity)
             }
             if let kind = activityKind {
-                activityWing(kind) {
+                activityWing(kind, leading: true) {
                     LiveActivityWings.Leading(kind: kind, focus: vm.focus, media: vm.media)
                 }
             }
@@ -114,7 +114,7 @@ struct NotchContentView: View {
                     .transition(.opacity)
             }
             if let kind = activityKind {
-                activityWing(kind) {
+                activityWing(kind, leading: false) {
                     LiveActivityWings.Trailing(kind: kind, focus: vm.focus, media: vm.media)
                 }
             }
@@ -131,12 +131,21 @@ struct NotchContentView: View {
     /// One side of the folded notch's activity. A click on either side
     /// opens the panel on the tab it came from, as a tap on the Dynamic
     /// Island opens the app.
-    private func activityWing(_ kind: LiveActivity.Kind, @ViewBuilder content: () -> some View) -> some View {
-        Button {
+    ///
+    /// Each side's content sits the same distance in from its outer edge —
+    /// the cover's own top margin, so it is inset evenly on three sides — and
+    /// not centred in its half: the cover and the bars differ in width, and
+    /// centred they stood 16 pt and 13 pt from the edges, which read as the
+    /// whole island sitting off to one side.
+    private func activityWing(_ kind: LiveActivity.Kind, leading: Bool, @ViewBuilder content: () -> some View) -> some View {
+        let inset = max((panel.geometry.notchSize.height - 22) / 2, 6)
+        return Button {
             panel.onActivate?(kind == .focus ? .focus : .media)
         } label: {
             content()
-                .frame(width: NotchGeometry.activityWing, height: panel.geometry.notchSize.height)
+                .padding(leading ? .leading : .trailing, inset)
+                .frame(width: NotchGeometry.activityWing, height: panel.geometry.notchSize.height,
+                       alignment: leading ? .leading : .trailing)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

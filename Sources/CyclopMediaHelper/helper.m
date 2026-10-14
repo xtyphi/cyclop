@@ -190,6 +190,16 @@ static void sendCommandToActivePlayer(MRCommand command, NSDictionary *options) 
 static void handleCommand(NSString *line) {
     if ([line isEqualToString:@"get"]) {
         publish();
+    } else if ([line isEqualToString:@"art"]) {
+        // The app has no cover for the current track although one went out:
+        // a line lost on the way, or a track it dropped the cover for that
+        // this side still counts as delivered. Forget what was sent.
+        // On the queue the reading side runs on, so the reset cannot land in
+        // the middle of a comparison and be overwritten by it.
+        dispatch_async(sQueue, ^{
+            sArtworkID = nil;
+            publish();
+        });
     } else if ([line hasPrefix:@"cmd "]) {
         sendCommandToActivePlayer((MRCommand)[line substringFromIndex:4].intValue, nil);
         publish();
