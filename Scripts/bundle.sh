@@ -53,6 +53,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
     <key>NSSupportsSuddenTermination</key><false/>
     <key>NSAppleEventsUsageDescription</key>
     <string>Cyclop читает название текущего трека и управляет воспроизведением в Apple Music и Spotify.</string>
+    <key>NSAudioCaptureUsageDescription</key>
+    <string>Cyclop слушает, что играет, чтобы эквалайзер в чёлке двигался в такт музыке. Звук никуда не записывается и не отправляется.</string>
     <key>NSCalendarsFullAccessUsageDescription</key>
     <string>Cyclop показывает ближайшие встречи и кнопку подключения к ним.</string>
     <key>NSCalendarsUsageDescription</key>
@@ -90,12 +92,32 @@ clang -dynamiclib -fobjc-arc -O2 \
 # hardened runtime и отметкой времени, как для релиза. Ключ и сертификат
 # в скрипте не живут, они в связке ключей того, кто выпускает, или в
 # секретах раннера (см. docs/signing.md).
-IDENTITY="${CODESIGN_IDENTITY:--}"
-if [ "$IDENTITY" = "-" ]; then
-    echo "==> ad-hoc signing"
-else
-    echo "==> signing as $IDENTITY"
+#
+# Между ними — местная подпись: самоподписанный сертификат «Cyclop Local
+# Signing» в связке ключей того, кто собирает (как его завести, в
+# docs/signing.md). Её берёт сборка без CODESIGN_IDENTITY, если сертификат
+# есть. Ad-hoc-подпись меняется с каждой сборкой, и macOS забывает выданные
+# разрешения — Универсальный доступ, запись звука — после каждого
+# обновления; подпись одним и тем же сертификатом они переживают. Без
+# сертификата всё как раньше, ad-hoc.
+LOCAL_IDENTITY_NAME="Cyclop Local Signing"
+MODE=adhoc
+if [ -n "${CODESIGN_IDENTITY:-}" ] && [ "$CODESIGN_IDENTITY" != "-" ]; then
+    MODE=release
+    IDENTITY="$CODESIGN_IDENTITY"
+elif [ -z "${CODESIGN_IDENTITY:-}" ]; then
+    LOCAL_HASH="$(security find-identity -p codesigning 2>/dev/null \
+        | grep -F "\"$LOCAL_IDENTITY_NAME\"" | awk 'NR == 1 { print $2 }' || true)"
+    if [ -n "$LOCAL_HASH" ]; then
+        MODE=local
+        IDENTITY="$LOCAL_HASH"
+    fi
 fi
+case "$MODE" in
+    adhoc) IDENTITY="-"; echo "==> ad-hoc signing" ;;
+    local) echo "==> local signing as $LOCAL_IDENTITY_NAME" ;;
+    release) echo "==> signing as $IDENTITY" ;;
+esac
 
 # Расширенные атрибуты снимаются первыми. iCloud вешает на файлы
 # com.apple.FinderInfo, а codesign отказывается подписывать что-либо с ним —
@@ -119,12 +141,16 @@ xattr -cr "$APP"
 # бандл, про который codesign говорит «code object is not signed at all».
 # Заметить это можно было только по возвращающимся запросам TCC — то есть у
 # того, кто уже поставил приложение.
-if [ "$IDENTITY" = "-" ]; then
-    codesign --force --sign - "$APP/Contents/Resources/libcyclopmedia.dylib"
-    codesign --force --sign - "$APP"
+# Местная подпись — тоже без hardened runtime, по той же причине: это всё та
+# же сборка для своей машины, ей нужна только постоянная личность.
+if [ "$MODE" != release ]; then
+    # Через &&: внутри `if … fi ||` set -e не действует, и упавшая подпись
+    # хелпера иначе прошла бы молча, если бандл потом подписался.
+    codesign --force --sign "$IDENTITY" "$APP/Contents/Resources/libcyclopmedia.dylib" &&
+    codesign --force --sign "$IDENTITY" "$APP"
 else
     codesign --force --timestamp --sign "$IDENTITY" \
-        "$APP/Contents/Resources/libcyclopmedia.dylib"
+        "$APP/Contents/Resources/libcyclopmedia.dylib" &&
     codesign --force --timestamp --options runtime \
         --entitlements "$ROOT/Resources/Cyclop.entitlements" \
         --sign "$IDENTITY" "$APP"

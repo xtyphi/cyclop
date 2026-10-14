@@ -8,6 +8,42 @@
 Локальная сборка (`Scripts/bundle.sh`) остаётся ad-hoc и ничего из этого не
 требует.
 
+## 0. Местная подпись (по желанию)
+
+Ad-hoc-подпись меняется с каждой сборкой, и macOS забывает выданные
+разрешения: Универсальный доступ для вставки по ⌥Enter, запись звука для
+эквалайзера. Чтобы они переживали обновления, достаточно своего
+самоподписанного сертификата с именем `Cyclop Local Signing`: `bundle.sh`
+найдёт его в связке ключей сам и подпишет им, а без него подпишет ad-hoc,
+как раньше. Apple-аккаунт не нужен.
+
+```sh
+cat > /tmp/cyclop-cert.cnf <<'EOF'
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+CN = Cyclop Local Signing
+[ext]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+EOF
+cd "$(mktemp -d)" && umask 077
+openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 3650 -config /tmp/cyclop-cert.cnf
+export P12PASS="$(openssl rand -hex 16)"
+openssl pkcs12 -export -legacy -inkey key.pem -in cert.pem -name "Cyclop Local Signing" -out id.p12 -passout env:P12PASS
+security import id.p12 -k ~/Library/Keychains/login.keychain-db -P "$P12PASS" -T /usr/bin/codesign
+rm -f key.pem id.p12
+```
+
+`-legacy` нужен OpenSSL 3 и новее: иначе связка ключей не прочтёт файл
+(«MAC verification failed»). Сертификат помечен как недоверенный
+(`CSSMERR_TP_NOT_TRUSTED`): подписи для своей машины это не мешает, доверие
+ему выдавать не нужно. После первой сборки с ним macOS один раз заново
+спросит про каждое разрешение.
+
 ## 1. Сертификат Developer ID Application
 
 Xcode не нужен, хватает Command Line Tools и Связки ключей.
