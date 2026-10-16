@@ -334,15 +334,20 @@ struct NotchGeometry {
 
     /// Hover target while collapsed, in global screen coordinates. Slightly
     /// taller than the notch so the panel opens just before the pointer lands.
-    var hoverRect: CGRect {
+    var hoverRect: CGRect { hoverRect(folded: notchSize.width) }
+
+    /// The same for a folded notch wider than the notch itself: with the timer
+    /// or the song on its sides, the whole black shape is what the pointer
+    /// aims at, and a target cut to the notch alone left the sides dead.
+    func hoverRect(folded width: CGFloat) -> CGRect {
         // The slack goes wherever the full depth does: it is what makes the
         // panel open just before the pointer lands, and it is only withheld
         // where a menu bar underneath would feel it.
         let slack: CGFloat = guardsIcons ? 0 : 4
         return includingTopEdge(CGRect(
-            x: notchCenterX - notchSize.width / 2 - 6,
+            x: notchCenterX - width / 2 - 6,
             y: screen.frame.maxY - collapsedDepth - slack,
-            width: notchSize.width + 12,
+            width: width + 12,
             height: collapsedDepth + slack
         ))
     }

@@ -167,7 +167,6 @@ final class NotchScreenPanel {
 
         applyActiveRect(open: false)
 
-        pointer.openRect = geometry.hoverRect
         pointer.warmZone = geometry.warmZone
         // Cut for the tab that will be showing, not for the standard body: the
         // tab is shared, so a screen built while the teleprompter is up opens
@@ -488,6 +487,14 @@ final class NotchScreenPanel {
             rect = rect.insetBy(dx: -Theme.openTopRadius, dy: 0)
         }
         rootView.activeRect = rect
+        // Follows the folded shape for the timer or the song on its sides. Not
+        // for the end-of-sprint notice: its close button sits on a side, and a
+        // pointer on its way to it would open the panel over it.
+        if !open {
+            pointer.openRect = foldedSize == geometry.activitySize
+                ? geometry.hoverRect(folded: foldedSize.width)
+                : geometry.hoverRect
+        }
         pointer.interactiveRect = geometry
             .contentScreenRect(for: size)
             .insetBy(dx: open ? -Theme.openTopRadius : 0, dy: 0)
