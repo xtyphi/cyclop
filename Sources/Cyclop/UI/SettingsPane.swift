@@ -15,6 +15,7 @@ struct SettingsPane: View {
     @State private var menuBarIconVisible = AppDelegate.isMenuBarIconVisible
     @State private var saveClipboardImages = NotchViewModel.saveClipboardImagesEnabled
     @State private var allDisplays = NotchGeometry.showsOnAllDisplays
+    @State private var mirrorNotes = AppleNotesMirror.isEnabled
     @State private var watchScreenshotFolder = false
     @State private var screenshotUsage: (files: Int, bytes: Int64) = (0, 0)
 
@@ -84,6 +85,14 @@ struct SettingsPane: View {
                         shelf.refreshFromDisk()
                         refreshUsage()
                     }
+                }
+
+                section(localized("Notes")) {
+                    toggleRow(
+                        symbol: "note.text",
+                        title: localized("Copy to Apple Notes"),
+                        isOn: mirrorNotesBinding
+                    )
                 }
 
                 section(localized("Snippets")) {
@@ -175,6 +184,18 @@ struct SettingsPane: View {
     /// Turning this off folds the panel back to one screen — the notched one
     /// if this Mac has a notch, the main display otherwise. The panels are
     /// rebuilt on the spot, so the switch is its own confirmation.
+    /// Turning on copies what is already there, not only what comes next.
+    private var mirrorNotesBinding: Binding<Bool> {
+        Binding(
+            get: { mirrorNotes },
+            set: { wants in
+                mirrorNotes = wants
+                AppleNotesMirror.isEnabled = wants
+                if wants { vm.notes.mirror() }
+            }
+        )
+    }
+
     private var allDisplaysBinding: Binding<Bool> {
         Binding(
             get: { allDisplays },
