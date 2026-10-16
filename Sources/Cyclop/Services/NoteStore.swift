@@ -7,6 +7,9 @@ struct Note: Identifiable, Codable, Equatable {
     /// The copy in Apple Notes, when mirroring is on. Optional, so files
     /// written before it existed still decode.
     var appleID: String?
+    /// The text Notes last confirmed. Kept in the file, so an edit that had
+    /// not reached Notes when the app quit still goes on the next launch.
+    var mirroredText: String?
 }
 
 /// Scratch notes: somewhere to put a thought down for an hour.
@@ -32,11 +35,9 @@ final class NoteStore: ObservableObject {
 
     private let saves = DebouncedWrite()
 
-    /// Text last handed to Apple Notes per note, so an unchanged note is not
-    /// rewritten, and notes with a write still in flight. A note edited during
-    /// its write goes again once the write answers: two writes at once would
-    /// each create a note of their own.
-    private var mirrored: [Note.ID: String] = [:]
+    /// Notes with a write still in flight. A note edited during its write
+    /// goes again once the write answers: two writes at once would each create
+    /// a note of their own.
     private var mirroring: Set<Note.ID> = []
 
     init() {
@@ -66,7 +67,11 @@ final class NoteStore: ObservableObject {
     }
 
     func remove(_ id: Note.ID) {
-        if let appleID = notes.first(where: { $0.id == id })?.appleID { AppleNotesMirror.delete(appleID) }
+        // Only while mirroring is on: switched off, the Apple note is the
+        // user's own and may hold things written there since.
+        if AppleNotesMirror.isEnabled, let appleID = notes.first(where: { $0.id == id })?.appleID {
+            AppleNotesMirror.delete(appleID)
+        }
         notes.removeAll { $0.id == id }
         if selected == id { selected = notes.first?.id }
         scheduleSave()
@@ -77,7 +82,7 @@ final class NoteStore: ObservableObject {
     /// blank cards is exactly the clutter a scratchpad exists to avoid.
     func leave() {
         for note in notes where note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if let appleID = note.appleID { AppleNotesMirror.delete(appleID) }
+            if AppleNotesMirror.isEnabled, let appleID = note.appleID { AppleNotesMirror.delete(appleID) }
         }
         notes.removeAll { $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         if let selected, !notes.contains(where: { $0.id == selected }) {
@@ -93,7 +98,6 @@ final class NoteStore: ObservableObject {
               let stored = try? JSONDecoder().decode([Note].self, from: data) else { return }
         notes = stored
         selected = notes.first?.id
-        for note in notes where note.appleID != nil { mirrored[note.id] = note.text }
     }
 
     /// A moment after the typing pauses, not on every keystroke: the text
@@ -112,7 +116,7 @@ final class NoteStore: ObservableObject {
     /// are either about to be typed into or about to be swept out.
     func mirror() {
         guard AppleNotesMirror.isEnabled else { return }
-        for note in notes where mirrored[note.id] != note.text && !mirroring.contains(note.id)
+        for note in notes where note.mirroredText != note.text && !mirroring.contains(note.id)
             && !note.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             push(note)
         }
@@ -130,13 +134,12 @@ final class NoteStore: ObservableObject {
                 AppleNotesMirror.delete(appleID)
                 return
             }
-            mirrored[note.id] = text
-            let changed = notes[index].text != text
-            if notes[index].appleID != appleID { notes[index].appleID = appleID }
-            else if !changed { return }
-            // Through the same debounce as typing, so a pending write of any
-            // other note is carried along rather than replaced.
-            scheduleSave()
+            notes[index].appleID = appleID
+            notes[index].mirroredText = text
+            // Straight to disk, not after a debounce: a crash before the id is
+            // saved would make the next launch create the Apple note again.
+            persist()
+            if notes[index].text != text { mirror() }
         }
     }
 
