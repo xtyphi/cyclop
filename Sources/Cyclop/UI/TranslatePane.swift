@@ -97,6 +97,11 @@ struct TranslatePane: View {
                     translator.reset()
                     return .handled
                 }
+
+            if !translator.fixes.isEmpty {
+                spelling
+                    .transition(.opacity)
+            }
         }
         .padding(10)
         .background(
@@ -204,6 +209,52 @@ struct TranslatePane: View {
         return ladder.first { count <= usable / (0.76 * $0 * $0) } ?? ladder[ladder.count - 1]
     }
 
+    // MARK: - Spelling
+
+    /// The fixed spelling of each misspelled word, one tap to put it in. With
+    /// more than one there is also a tap for all of them at once.
+    private var spelling: some View {
+        // Scrolls rather than widens: a row of long words would otherwise
+        // push the column wider than its pair and the swap button off centre.
+        ScrollView(.horizontal) { spellingRow }
+            .scrollIndicators(.never)
+            .frame(height: 20)
+    }
+
+    private var spellingRow: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "character.cursor.ibeam")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Theme.tertiary)
+            // First, so it is never the one scrolled out of sight.
+            if translator.fixes.count > 1 {
+                chip(localized("Fix All"), dim: true) { translator.apply(translator.fixes) }
+            }
+            ForEach(translator.fixes) { fix in
+                chip(fix.guess) { translator.apply([fix]) }
+                    .help(fix.word)
+            }
+        }
+        .animation(.easeOut(duration: 0.18), value: translator.fixes)
+    }
+
+    private func chip(_ title: String, dim: Bool = false, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: Theme.footnote, weight: .medium))
+                .foregroundStyle(dim ? Theme.secondary : .white)
+                .lineLimit(1)
+                // Full width of the word: a truncated correction is no
+                // correction at all.
+                .fixedSize()
+                .padding(.horizontal, 8)
+                .frame(height: 20)
+                .background(Capsule().fill(Color.white.opacity(0.1)))
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.default)
+    }
+
     // MARK: - Direction
 
     /// Sends the result back as the new source. With nothing translated yet
@@ -257,6 +308,8 @@ struct TranslatePane: View {
         // per letter would be both wasteful and visibly jumpy.
         try? await Task.sleep(for: .milliseconds(320))
         guard !Task.isCancelled else { return }
+
+        translator.checkSpelling()
 
         let route = Translator.route(for: text)
         if var current = configuration, current.source == route.source, current.target == route.target {

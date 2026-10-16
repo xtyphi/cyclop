@@ -71,6 +71,7 @@
 "Downloading %@ ↔ %@…" = "Downloading %@ ↔ %@…";
 "Translation needs the %@ ↔ %@ language pack, about 100 MB." = "Translation needs the %@ ↔ %@ language pack, about 100 MB.";
 "Swap Languages" = "Swap Languages";
+"Fix All" = "Fix All";
 "The %@ → %@ language pack is not installed." = "The %@ → %@ language pack is not installed.";
 "macOS does not translate this pair of languages." = "macOS does not translate this pair of languages.";
 

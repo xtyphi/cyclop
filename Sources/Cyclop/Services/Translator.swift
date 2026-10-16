@@ -36,6 +36,16 @@ final class Translator: ObservableObject {
     /// Checked when the tab opens, before anything is typed: an empty pane
     /// with no pack behind it would otherwise look ready and do nothing.
     @Published private(set) var packMissing = false
+    /// Misspelled words in the input with the spelling macOS would put
+    /// instead. Shown under the field as one-tap fixes.
+    @Published private(set) var fixes: [Fix] = []
+
+    struct Fix: Equatable, Identifiable {
+        var range: NSRange
+        var word: String
+        var guess: String
+        var id: Int { range.location }
+    }
 
     private var attempt = 0
 
@@ -75,6 +85,42 @@ final class Translator: ObservableObject {
         }
     }
 
+    // MARK: - Spelling
+
+    /// Looked up after a pause in typing, with the same language the route
+    /// picked: the system checker has both, but guessing the language of a
+    /// single misspelled word is exactly where it goes wrong.
+    func checkSpelling() {
+        let text = input
+        let language = route.source.languageCode?.identifier ?? "en"
+        let checker = NSSpellChecker.shared
+        var found: [Fix] = []
+        var start = 0
+        while found.count < 4 {
+            let range = checker.checkSpelling(of: text, startingAt: start, language: language,
+                                              wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
+            guard range.location != NSNotFound, range.length > 0 else { break }
+            start = range.location + range.length
+            if let guess = checker.guesses(forWordRange: range, in: text, language: language,
+                                           inSpellDocumentWithTag: 0)?.first {
+                found.append(Fix(range: range, word: (text as NSString).substring(with: range), guess: guess))
+            }
+        }
+        fixes = found
+    }
+
+    /// Back to front, so the ranges still ahead stay where they were. A word
+    /// edited since the check is left alone rather than overwritten.
+    func apply(_ chosen: [Fix]) {
+        var text = input as NSString
+        for fix in chosen.sorted(by: { $0.range.location > $1.range.location }) {
+            guard NSMaxRange(fix.range) <= text.length, text.substring(with: fix.range) == fix.word else { continue }
+            text = text.replacingCharacters(in: fix.range, with: fix.guess) as NSString
+        }
+        fixes = []
+        input = text as String
+    }
+
     /// The result becomes the text to translate, which sends it back the
     /// other way: the direction follows the script of whatever is typed.
     func swap() {
@@ -84,6 +130,7 @@ final class Translator: ObservableObject {
     }
 
     func clear() {
+        fixes = []
         output = ""
         failure = nil
         needsDownload = false
