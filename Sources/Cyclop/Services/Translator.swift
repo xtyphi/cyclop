@@ -33,6 +33,9 @@ final class Translator: ObservableObject {
     /// The failure is a missing language pack, which is a thing the user can
     /// go and fix — so the pane offers the button that takes them there.
     @Published private(set) var needsDownload = false
+    /// Checked when the tab opens, before anything is typed: an empty pane
+    /// with no pack behind it would otherwise look ready and do nothing.
+    @Published private(set) var packMissing = false
 
     private var attempt = 0
 
@@ -54,6 +57,30 @@ final class Translator: ObservableObject {
 
     func retry() {
         attempt += 1
+    }
+
+    /// One pack covers both directions, so one check is enough.
+    func checkPack() async {
+        let status = await LanguageAvailability().status(from: Self.english, to: Self.russian)
+        packMissing = status == .supported
+    }
+
+    func installPack() {
+        LanguagePackInstaller.install(from: Self.english, to: Self.russian) { [weak self] in
+            guard let self else { return }
+            Task {
+                await self.checkPack()
+                if !self.packMissing { self.retry() }
+            }
+        }
+    }
+
+    /// The result becomes the text to translate, which sends it back the
+    /// other way: the direction follows the script of whatever is typed.
+    func swap() {
+        guard !output.isEmpty else { return }
+        input = output
+        output = ""
     }
 
     func clear() {

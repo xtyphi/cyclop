@@ -23,10 +23,13 @@ struct TranslatePane: View {
 
     var body: some View {
         let font = fontSize(in: paneSize)
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 24) {
             source(font)
             result(font)
         }
+        // Between the two titles. Always there, even before anything is
+        // typed: it is what says the pane goes both ways.
+        .overlay(alignment: .top) { swapButton.padding(.top, 10) }
         // Measured from a background layer rather than by wrapping the content
         // in a GeometryReader. Wrapped, the type size depends on a measurement
         // that depends on the very text being sized, so every wrap onto a new
@@ -48,6 +51,7 @@ struct TranslatePane: View {
             await translator.run(session)
         }
         .onAppear { focused = wantsKeyboard }
+        .task { await translator.checkPack() }
         .onChange(of: wantsKeyboard) { _, wants in focused = wants }
     }
 
@@ -74,7 +78,9 @@ struct TranslatePane: View {
             TextEditor(text: $translator.input)
                 .textEditorStyle(.plain)
                 .scrollContentBackground(.hidden)
-                .scrollIndicators(.hidden)
+                // `.never`, not `.hidden`: with "Show scroll bars: Always" in
+                // System Settings, hidden still draws an empty track.
+                .scrollIndicators(.never)
                 .font(.system(size: font))
                 .foregroundStyle(.white)
                 // Grey rather than the system accent: the caret has to say
@@ -122,6 +128,7 @@ struct TranslatePane: View {
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 10) {
                     if translator.needsDownload {
+                        Button("Download") { translator.installPack() }
                         Button("Translation Languages…") { Translator.openLanguageSettings() }
                     }
                     Button("Retry") { translator.retry() }
@@ -139,6 +146,20 @@ struct TranslatePane: View {
                     .foregroundStyle(.white)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        } else if translator.packMissing {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(localized("Translation needs the %@ ↔ %@ language pack, about 100 MB.",
+                               Translator.name(Translator.english), Translator.name(Translator.russian)))
+                    .font(.system(size: Theme.footnote))
+                    .foregroundStyle(Theme.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Download") { translator.installPack() }
+                    .buttonStyle(.plain)
+                    .pointerStyle(.default)
+                    .font(.system(size: Theme.caption, weight: .medium))
+                    .foregroundStyle(.white)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
@@ -162,7 +183,7 @@ struct TranslatePane: View {
     /// minus the gap, minus the padding, minus the title row above it.
     private func textArea(in size: CGSize) -> CGSize {
         CGSize(
-            width: max(40, (size.width - 10) / 2 - 20),
+            width: max(40, (size.width - 24) / 2 - 20),
             height: max(40, size.height - 40)
         )
     }
@@ -181,6 +202,23 @@ struct TranslatePane: View {
         let area = textArea(in: size)
         let usable = area.width * area.height * 0.95
         return ladder.first { count <= usable / (0.76 * $0 * $0) } ?? ladder[ladder.count - 1]
+    }
+
+    // MARK: - Direction
+
+    /// Sends the result back as the new source. With nothing translated yet
+    /// it only shows that the pane works both ways.
+    private var swapButton: some View {
+        Button { translator.swap() } label: {
+            Image(systemName: "arrow.left.arrow.right")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(translator.output.isEmpty ? Theme.tertiary : Theme.secondary)
+                .frame(width: 20, height: 14)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .pointerStyle(.default)
+        .help(localized("Swap Languages"))
     }
 
     // MARK: - Shared
