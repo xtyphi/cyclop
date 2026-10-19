@@ -68,6 +68,12 @@ struct NotchContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .mask(IslandSilhouette(motion: motion))
+
+            // Outside the mask: the buttons stand beside the island, not in it.
+            if isOpen {
+                IslandButtons(vm: vm, panel: panel)
+                    .transition(.opacity.animation(.easeIn(duration: 0.12)))
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onAppear { motion.set(outerSize, animated: false) }
@@ -81,7 +87,7 @@ struct NotchContentView: View {
         let body = panel.openBodySize
         return VStack(spacing: 0) {
             openHeader
-            content
+            page
                 // Open, the notice floats over the top of the pane rather
                 // than in the header strip, which is kept free of anything
                 // clickable (see below).
@@ -147,22 +153,26 @@ struct NotchContentView: View {
     }
 
     private var openHeader: some View {
-        HStack(spacing: 0) {
-            Text(vm.tab.title.uppercased())
+        let title = panel.showsSections ? localized("Sections") : vm.tab.title
+        return HStack(spacing: 0) {
+            Text(title.uppercased())
                 .font(.system(size: Theme.caption, weight: .semibold))
                 .tracking(0.8)
                 .foregroundStyle(Theme.tertiary)
                 .padding(.leading, 16)
-                .id(vm.tab)
+                .id(title)
                 .transition(.opacity)
             Spacer(minLength: 0)
             Color.clear.frame(width: panel.geometry.notchSize.width, height: 1)
             Spacer(minLength: 0)
-            trailing
-                .padding(.trailing, 16)
+            if !panel.showsSections {
+                trailing
+                    .padding(.trailing, 16)
+                    .transition(.opacity)
+            }
         }
         .frame(height: panel.geometry.notchSize.height)
-        .animation(Theme.paneSwap, value: vm.tab)
+        .animation(Theme.paneSwap, value: title)
     }
 
     /// One side of the folded notch's activity. A click on either side
@@ -249,17 +259,21 @@ struct NotchContentView: View {
 
     // MARK: - Body
 
-    private var content: some View {
-        HStack(spacing: 14) {
-            Rail(vm: vm, panel: panel, tabs: vm.leftRail)
-            panes
-            Rail(vm: vm, panel: panel, tabs: vm.rightRail)
+    /// The tab, or the grid of every section in its place.
+    private var page: some View {
+        ZStack(alignment: .top) {
+            if panel.showsSections {
+                SectionsGallery(vm: vm, panel: panel)
+                    .transition(.opacity.animation(Theme.paneSwap))
+            } else {
+                panes
+                    .padding(.horizontal, 14)
+                    // The body's height is measured from this same number.
+                    .padding(.bottom, NotchGeometry.bodyBottomPadding)
+                    .transition(.opacity.animation(Theme.paneSwap))
+            }
         }
-        .padding(.horizontal, 14)
-        // The body's height is measured from this same number, so the two
-        // cannot drift apart into a rail that does not fit.
-        .padding(.bottom, NotchGeometry.bodyBottomPadding)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private var panes: some View {
@@ -342,86 +356,6 @@ private struct CurrencyRateDate: View {
                 .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
                 .foregroundStyle(Theme.tertiary)
         }
-    }
-}
-
-/// Tab switcher.
-///
-/// Hovering switches tabs, but only after the pointer has stopped: a pointer
-/// crossing the rail on its way somewhere else is gone in a few dozen
-/// milliseconds, while one that came to choose stays put. The same dwell
-/// threshold is what separates "the mouse was flung across the top of the
-/// screen" from "the mouse came to the notch" in `PointerWatcher`.
-private struct Rail: View {
-    @ObservedObject var vm: NotchViewModel
-    @ObservedObject var panel: PanelState
-    /// Which icons this rail carries — there are two rails now, one per side.
-    let tabs: [NotchViewModel.Tab]
-
-    @State private var hovered: NotchViewModel.Tab?
-
-    /// Long enough to swallow a pass-through, short enough that a deliberate
-    /// hover still feels like it answered instantly.
-    private let dwell = Duration.milliseconds(150)
-
-    var body: some View {
-        VStack(spacing: NotchGeometry.railSpacing) {
-            ForEach(tabs) { tab in
-                Button {
-                    if tab != vm.tab { Haptics.snap() }
-                    panel.select(tab)
-                } label: {
-                    Image(systemName: tab.symbol)
-                        // Bigger than the 12 pt it started at, inside the same
-                        // box: the box is already at the ceiling `railIconHeight`
-                        // allows, so growing it would shrink every icon on the
-                        // rail instead of enlarging this one.
-                        .font(.system(size: 14, weight: .medium))
-                        .frame(width: 30, height: panel.geometry.railIconHeight)
-                        .background(
-                            RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous)
-                                .fill(fill(for: tab))
-                        )
-                        .foregroundStyle(vm.tab == tab ? Color.white : Theme.tertiary)
-                        .contentShape(RoundedRectangle(cornerRadius: Theme.radiusM, style: .continuous))
-                        // A render-time transform. Growing the frame instead
-                        // would re-lay out the rail on every hover, and layout
-                        // that runs on pointer movement is exactly the kind
-                        // that shows up as a stutter.
-                        .scaleEffect(hovered == tab ? 1.15 : 1)
-                }
-                .buttonStyle(.plain)
-                .onHover { inside in
-                    if inside {
-                        hovered = tab
-                    } else if hovered == tab {
-                        hovered = nil
-                    }
-                }
-            }
-        }
-        .frame(width: 30)
-        // Centred in the height an ordinary tab has, then that block pinned to
-        // the top of whatever height this tab actually got. On the eight normal
-        // tabs the two are the same and nothing moves; on the teleprompter the
-        // extra 192 pt goes to the script below, and the icons stay put.
-        .frame(height: panel.geometry.standardContentHeight, alignment: .center)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .animation(Theme.contentAnimation, value: hovered)
-        // Moving to another icon cancels the pending switch along with the
-        // task, so only the icon actually rested on ever wins.
-        .task(id: hovered) {
-            guard let hovered, hovered != vm.tab else { return }
-            try? await Task.sleep(for: dwell)
-            guard !Task.isCancelled else { return }
-            Haptics.snap()
-            panel.select(hovered)
-        }
-    }
-
-    private func fill(for tab: NotchViewModel.Tab) -> Color {
-        if vm.tab == tab { return Theme.surfaceHover }
-        return hovered == tab ? Theme.surface : .clear
     }
 }
 

@@ -16,9 +16,9 @@ final class PointerWatcher {
     var closeRect: CGRect = .zero
     /// Where the panel takes clicks. Everywhere else the window must let them
     /// through, so this doubles as the `ignoresMouseEvents` trigger.
-    var interactiveRect: CGRect = .zero
+    var interactiveRects: [CGRect] = []
     /// Keeps the panel interactive while a drag is being tracked, even if the
-    /// pointer wanders outside `interactiveRect` mid-session.
+    /// pointer wanders outside `interactiveRects` mid-session.
     var isDragging: () -> Bool = { false }
     /// Whether the panel is expanded right now. Read, not assumed: this watcher
     /// tracks where the pointer is, and the panel is opened and closed by other
@@ -143,7 +143,7 @@ final class PointerWatcher {
         let point = NSEvent.mouseLocation
         updateRate(for: point)
 
-        let interactive = isDragging() || interactiveRect.contains(point)
+        let interactive = isDragging() || interactiveRects.contains { $0.contains(point) }
         if wasInteractive != interactive {
             wasInteractive = interactive
             onInteractiveChange?(interactive)

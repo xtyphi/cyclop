@@ -1,18 +1,21 @@
 import AppKit
 import UniformTypeIdentifiers
 
-/// Content view of the panel. Everything outside `activeRect` is click-through,
-/// so the window can stay at its full expanded size while the panel is collapsed.
+/// Content view of the panel. Everything outside `activeRects` is
+/// click-through, so the window can stay at its full expanded size while the
+/// panel is collapsed.
 final class NotchRootView: NSView {
-    /// Interactive area, in window coordinates.
-    var activeRect: CGRect = .zero {
+    /// Interactive areas, in window coordinates: the island, and each round
+    /// button beside it. Separate rects rather than one around them all, so
+    /// the gaps between the buttons stay with the app underneath.
+    var activeRects: [CGRect] = [] {
         didSet {
-            guard activeRect != oldValue else { return }
+            guard activeRects != oldValue else { return }
             refreshCursorArea()
         }
     }
 
-    private var cursorArea: NSTrackingArea?
+    private var cursorAreas: [NSTrackingArea] = []
 
     var onDragEntered: (() -> Void)?
     var onDragExited: (() -> Void)?
@@ -35,7 +38,7 @@ final class NotchRootView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? {
         // While a drag is in flight the whole window must stay a valid target,
         // otherwise AppKit drops us as the destination mid-animation.
-        guard isReceivingDrag || activeRect.contains(point) else { return nil }
+        guard isReceivingDrag || activeRects.contains(where: { $0.contains(point) }) else { return nil }
         return super.hitTest(point)
     }
 
@@ -56,18 +59,16 @@ final class NotchRootView: NSView {
     /// and this panel is never key. `.activeAlways` keeps the tracking area
     /// live regardless of that and of the app being inactive.
     private func refreshCursorArea() {
-        if let cursorArea {
-            removeTrackingArea(cursorArea)
-            self.cursorArea = nil
+        cursorAreas.forEach(removeTrackingArea)
+        cursorAreas = activeRects.filter { !$0.isEmpty }.map { rect in
+            let area = NSTrackingArea(
+                rect: rect,
+                options: [.cursorUpdate, .mouseEnteredAndExited, .activeAlways],
+                owner: self
+            )
+            addTrackingArea(area)
+            return area
         }
-        guard !activeRect.isEmpty else { return }
-        let area = NSTrackingArea(
-            rect: activeRect,
-            options: [.cursorUpdate, .mouseEnteredAndExited, .activeAlways],
-            owner: self
-        )
-        addTrackingArea(area)
-        cursorArea = area
     }
 
     override func cursorUpdate(with event: NSEvent) {

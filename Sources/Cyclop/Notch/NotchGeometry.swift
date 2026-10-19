@@ -21,25 +21,19 @@ struct NotchGeometry {
     /// about that display and not about this Mac.
     let guardsIcons: Bool
 
-    /// Metrics of the tab rail that do not depend on the notch. `railIconHeight`
-    /// is not among them — see below.
-    static let railSpacing: CGFloat = 4
-    /// Gap between the rail and the bottom edge of the body.
+    /// Gap between the content and the bottom edge of the body.
     static let bodyBottomPadding: CGFloat = 14
 
     /// Size of the fully expanded panel body. Held constant across every Mac:
     /// letting it follow the header made two people on the very same model
     /// see two different heights, just from different display-scaling
     /// settings — 38 pt against 32 for the same physical notch, an 11 pt
-    /// spread from one slider (#27). What differs between Macs lives in
-    /// `railIconHeight` instead, which is the one thing in the body actually
-    /// free to give.
+    /// spread from one slider (#27).
     ///
-    /// 236 since a rail took a seventh icon — the timer, under the player on
-    /// the left: the lowest height at
-    /// which seven icons get at least the box six had in 208, for every notch
-    /// from 22 to 44 pt — the rail grew, the icons did not shrink.
-    let expandedSize = CGSize(width: 620, height: 236)
+    /// 532 wide since the tab rails left the body for the round buttons
+    /// beside it: the panes keep exactly the width they had between the two
+    /// rails, so none of them had to be laid out again.
+    let expandedSize = CGSize(width: 532, height: 236)
 
     /// Body for the teleprompter, the one tab that asks for more.
     ///
@@ -64,39 +58,87 @@ struct NotchGeometry {
     /// never resized: it is transparent outside the visible panel, and what is
     /// clickable is decided separately by the active rect.
     var maxBodyHeight: CGFloat {
-        max(expandedSize.height, Self.tallBodyHeight, clipboardExpandedSize.height)
+        max(expandedSize.height, Self.tallBodyHeight, clipboardExpandedSize.height,
+            sectionsBodySize(tabs: NotchViewModel.Tab.allCases.count).height)
     }
 
-    /// What the body has left for content on an ordinary tab, once the header
-    /// and the padding beneath are taken out.
-    ///
-    /// The rails are held to this even on the tab that is taller, so the icons
-    /// stay at the same height on every tab. Centred in the body instead, they
-    /// slid down by half the difference — 96 pt — the moment the teleprompter
-    /// opened, which put the icon just clicked well below the pointer that had
-    /// clicked it.
-    var standardContentHeight: CGFloat {
-        expandedSize.height - notchSize.height - Self.bodyBottomPadding
+    // MARK: - Sections
+
+    /// Tiles of the sections grid: as wide as the row allows, never narrower.
+    static let tileMinWidth: CGFloat = 92
+    static let tileHeight: CGFloat = 86
+    static let tileSpacing: CGFloat = 8
+    /// Gap between the header and the first row of tiles.
+    static let sectionsTopGap: CGFloat = 6
+
+    /// Width the content gets inside the body.
+    var contentWidth: CGFloat { expandedSize.width - 2 * 14 }
+
+    var sectionsColumns: Int {
+        max(1, Int((contentWidth + Self.tileSpacing) / (Self.tileMinWidth + Self.tileSpacing)))
     }
 
-    /// Height each rail icon gets. A ceiling, not a constant: six icons at
-    /// the full 24 pt plus the five 4 pt gaps between them is 164 pt, and
-    /// the body only has `expandedSize.height − notchSize.height −
-    /// bodyBottomPadding` left to give the rail once the header — the notch
-    /// itself — and the padding beneath are taken out of the fixed height.
-    /// Sized for the longer of the two rails, whichever side that is.
-    /// Rounded down rather than to the nearest point: a rail that asks for
-    /// more than it is given should visibly yield, not overflow by a
-    /// fraction that clips it.
-    var railIconHeight: CGFloat {
-        let icons = CGFloat(max(NotchViewModel.Tab.leftRail.count, NotchViewModel.Tab.rightRail.count))
-        let available = expandedSize.height - notchSize.height - Self.bodyBottomPadding
-        let ceiling = (available - (icons - 1) * Self.railSpacing) / icons
-        return min(24, ceiling).rounded(.down)
+    /// Body for the sections grid: as many rows as the tabs take, so every
+    /// one is in sight without scrolling.
+    func sectionsBodySize(tabs: Int) -> CGSize {
+        let rows = CGFloat(max(1, (tabs + sectionsColumns - 1) / sectionsColumns))
+        let grid = rows * Self.tileHeight + (rows - 1) * Self.tileSpacing
+        return CGSize(
+            width: expandedSize.width,
+            height: notchSize.height + Self.sectionsTopGap + grid + Self.bodyBottomPadding
+        )
     }
 
-    /// Slack around the panel so the concave shoulders and shadow are not clipped.
-    let windowPadding = NSEdgeInsets(top: 0, left: 40, bottom: 44, right: 40)
+    // MARK: - Round buttons beside the island
+
+    static let buttonDiameter: CGFloat = 44
+    /// From the island's wall to the near edge of a button.
+    static let buttonGap: CGFloat = 12
+    /// Centre to centre, down a side or across the bottom.
+    static let buttonPitch: CGFloat = 54
+
+    /// Where the island's buttons sit, in SwiftUI's coordinates for the
+    /// window: origin at the top left, y growing down. The first button on
+    /// each side clears the menu bar rather than standing in it, where menu
+    /// bar utilities would hear its clicks too.
+    func buttonCenters(for body: CGSize, left: Int, right: Int, bottom: Int) -> (left: [CGPoint], right: [CGPoint], bottom: [CGPoint]) {
+        let bodyMinX = (windowSize.width - body.width) / 2
+        let bodyMaxX = bodyMinX + body.width
+        let radius = Self.buttonDiameter / 2
+        let top = notchSize.height + 6 + radius
+        func column(_ x: CGFloat, _ count: Int) -> [CGPoint] {
+            (0..<count).map { CGPoint(x: x, y: top + CGFloat($0) * Self.buttonPitch) }
+        }
+        let span = CGFloat(max(bottom - 1, 0)) * Self.buttonPitch
+        let row = (0..<bottom).map {
+            CGPoint(x: windowSize.width / 2 - span / 2 + CGFloat($0) * Self.buttonPitch,
+                    y: body.height + Self.buttonGap + radius)
+        }
+        return (
+            column(bodyMinX - Self.buttonGap - radius, left),
+            column(bodyMaxX + Self.buttonGap + radius, right),
+            row
+        )
+    }
+
+    /// The same buttons as click targets, in AppKit window coordinates.
+    func buttonRects(for body: CGSize, left: Int, right: Int, bottom: Int) -> [CGRect] {
+        let centers = buttonCenters(for: body, left: left, right: right, bottom: bottom)
+        let radius = Self.buttonDiameter / 2
+        return (centers.left + centers.right + centers.bottom).map {
+            CGRect(x: $0.x - radius, y: windowSize.height - $0.y - radius,
+                   width: Self.buttonDiameter, height: Self.buttonDiameter)
+        }
+    }
+
+    /// Window rect to screen rect.
+    func screenRect(_ rect: CGRect) -> CGRect {
+        rect.offsetBy(dx: windowFrame.minX, dy: windowFrame.minY)
+    }
+
+    /// Room around the body for the shoulders, the spring's swing past its
+    /// size, and the round buttons beside and below the island.
+    let windowPadding = NSEdgeInsets(top: 0, left: 72, bottom: 72, right: 72)
 
     /// Stable name for the display this geometry was cut from. AppKit hands
     /// out a fresh `NSScreen` for the same monitor on every reconfiguration,

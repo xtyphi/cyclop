@@ -171,7 +171,7 @@ final class NotchScreenPanel {
         // Cut for the tab that will be showing, not for the standard body: the
         // tab is shared, so a screen built while the teleprompter is up opens
         // straight into a body twice as deep as the rest.
-        pointer.closeRect = geometry.hoverRect(for: state.openBodySize)
+        pointer.closeRect = openHoverRect
         // Nothing under the notch means opening the moment the pointer arrives
         // costs nothing. A notch with menu bar icons under it is the other
         // case: a pointer crossing them is usually on its way to one of them,
@@ -237,6 +237,17 @@ final class NotchScreenPanel {
             }
             .store(in: &cancellables)
 
+        // The sections grid is a body of its own size, and the buttons around
+        // it move with its edges.
+        state.$showsSections
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    DispatchQueue.main.async { self?.refreshOpenRects() }
+                }
+            }
+            .store(in: &cancellables)
+
         // Driven by the deliberate request, not by which tab is showing: a
         // hover can land on the typing tab now, and that alone must not take
         // the keyboard away from the window underneath.
@@ -261,7 +272,7 @@ final class NotchScreenPanel {
         // A fresh panel starts closed. If the pointer is already sitting on
         // it — a display just woke, or was plugged in under the cursor —
         // reopen at once instead of waiting for a trip back to the notch.
-        if geometry.hoverRect(for: state.openBodySize).contains(NSEvent.mouseLocation) {
+        if openHoverRect.contains(NSEvent.mouseLocation) {
             pointer.setInside(true)
             setOpen(true)
         }
@@ -420,6 +431,8 @@ final class NotchScreenPanel {
     private func collapse() {
         guard state.isOpen else { return }
         state.isOpen = false
+        // The next visit starts on the tab, not on the grid it was chosen from.
+        state.showsSections = false
 
         // The keyboard goes back only now, a pass after the fold has started:
         // `acceptsKeyboard` no longer does it on its own, precisely because the
@@ -452,7 +465,7 @@ final class NotchScreenPanel {
             // Resync either way. A pointer that is still on the panel has to be
             // recorded as inside, or hover tracking stays convinced it left and
             // the panel hangs open until the notch is touched again.
-            let away = !geometry.hoverRect(for: state.openBodySize).contains(NSEvent.mouseLocation)
+            let away = !openHoverRect.contains(NSEvent.mouseLocation)
             pointer.setInside(!away)
             if away, !holdsOpen { setOpen(false) }
         }
@@ -462,7 +475,26 @@ final class NotchScreenPanel {
     private func refreshOpenRects() {
         guard state.isOpen else { return }
         applyActiveRect(open: true)
-        pointer.closeRect = geometry.hoverRect(for: state.openBodySize)
+        pointer.closeRect = openHoverRect
+    }
+
+    /// The round buttons around the open body, in window coordinates.
+    private var buttonRects: [CGRect] {
+        geometry.buttonRects(
+            for: state.openBodySize,
+            left: state.leftButtons.count,
+            right: state.rightButtons.count,
+            bottom: state.bottomButtons.count
+        )
+    }
+
+    /// Where the pointer counts as still on the open panel: the body, and the
+    /// buttons around it with a margin — the pointer crossing the gap on its
+    /// way to a button must not read as leaving.
+    private var openHoverRect: CGRect {
+        buttonRects
+            .map { geometry.screenRect($0).insetBy(dx: -16, dy: -16) }
+            .reduce(geometry.hoverRect(for: state.openBodySize)) { $0.union($1) }
     }
 
     /// What the folded notch claims: the notice, the timer or the song on
@@ -490,7 +522,7 @@ final class NotchScreenPanel {
             // the notch.
             rect = rect.insetBy(dx: -NotchShape.maxShoulder, dy: 0)
         }
-        rootView.activeRect = rect
+        rootView.activeRects = open ? [rect] + buttonRects : [rect]
         // Follows the folded shape for the timer or the song on its sides. Not
         // for the end-of-sprint notice: its close button sits on a side, and a
         // pointer on its way to it would open the panel over it.
@@ -499,8 +531,9 @@ final class NotchScreenPanel {
                 ? geometry.hoverRect(folded: foldedSize.width)
                 : geometry.hoverRect
         }
-        pointer.interactiveRect = geometry
+        let island = geometry
             .contentScreenRect(for: size)
             .insetBy(dx: open ? -NotchShape.maxShoulder : 0, dy: 0)
+        pointer.interactiveRects = open ? [island] + buttonRects.map(geometry.screenRect) : [island]
     }
 }

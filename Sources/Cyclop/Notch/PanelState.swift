@@ -14,6 +14,9 @@ final class PanelState: ObservableObject {
     /// Whether this screen's panel holds the keyboard. Per screen because only
     /// one window can be key, and it is this one the user clicked into.
     @Published var wantsKeyboard = false { didSet { notify(wantsKeyboard != oldValue) } }
+    /// The grid of every section is up instead of a tab. Per screen, like
+    /// open: it is a way of choosing, and the choice is the shared tab.
+    @Published var showsSections = false
 
     let geometry: NotchGeometry
     private let vm: NotchViewModel
@@ -53,6 +56,7 @@ final class PanelState: ObservableObject {
     /// teleprompter — it is a countdown. The extra height buys the paragraph
     /// the reader needs to see coming.
     var openBodySize: CGSize {
+        if showsSections { return geometry.sectionsBodySize(tabs: sections.count) }
         switch vm.tab {
         case .teleprompter: return geometry.tallExpandedSize
         case .clipboard: return geometry.clipboardExpandedSize
@@ -71,8 +75,40 @@ final class PanelState: ObservableObject {
     /// The tab is shared and the keyboard is not: choosing on one screen
     /// changes what every screen shows, but only this one starts listening.
     func select(_ tab: NotchViewModel.Tab) {
+        showsSections = false
         vm.tab = tab
         if tab.needsKeyboard { wantsKeyboard = true }
+    }
+
+    // MARK: - Navigation
+
+    /// Every tab that is switched on, in the order the grid shows them.
+    var sections: [NotchViewModel.Tab] { vm.leftRail + vm.rightRail }
+
+    /// What the round buttons beside and below the island stand for. The
+    /// grid on the left is the way to everything; the rest are the sections
+    /// reached for most, one click away. A tab switched off loses its button.
+    enum Button: Hashable {
+        case sections
+        case tab(NotchViewModel.Tab)
+    }
+
+    var leftButtons: [Button] { [.sections] + tabs([.focus]) }
+    var rightButtons: [Button] { tabs([.settings, .clipboard]) }
+    var bottomButtons: [Button] { tabs([.media]) }
+
+    private func tabs(_ list: [NotchViewModel.Tab]) -> [Button] {
+        list.filter(vm.isVisible).map { .tab($0) }
+    }
+
+    func press(_ button: Button) {
+        switch button {
+        case .sections:
+            showsSections.toggle()
+            if showsSections { wantsKeyboard = false }
+        case .tab(let tab):
+            select(tab)
+        }
     }
 
     private func notify(_ changed: Bool) {
