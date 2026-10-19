@@ -502,7 +502,7 @@ final class NotchScreenPanel {
     /// drawn one they would be a black pill parked over a full-screen app.
     private var foldedSize: CGSize {
         if vm.focus.alert.current != nil { return geometry.alertSize }
-        if vm.liveActivity.kind != nil, geometry.isPhysical { return geometry.activitySize }
+        if let kind = vm.liveActivity.kind, geometry.isPhysical { return geometry.activitySize(for: kind) }
         return geometry.collapsedSize
     }
 
@@ -527,7 +527,8 @@ final class NotchScreenPanel {
         // for the end-of-sprint notice: its close button sits on a side, and a
         // pointer on its way to it would open the panel over it.
         if !open {
-            pointer.openRect = foldedSize == geometry.activitySize
+            let showsActivity = vm.focus.alert.current == nil && vm.liveActivity.kind != nil && geometry.isPhysical
+            pointer.openRect = showsActivity
                 ? geometry.hoverRect(folded: foldedSize.width)
                 : geometry.hoverRect
         }

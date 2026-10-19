@@ -365,13 +365,16 @@ struct NotchGeometry {
     }
 
     /// How far the timer or the song reaches out on each side of the folded
-    /// notch: room for "89:59" on the right and a cover on the left, and no
-    /// more — this stays up for as long as the music plays, over menu bar
-    /// space that is somebody's.
-    static let activityWing: CGFloat = 52
+    /// notch: fitted to what it shows, and no more — this stays up for as
+    /// long as the music plays, over menu bar space that is somebody's. The
+    /// song needs a cover on one side and the bars on the other; the timer
+    /// needs "89:59" in digits large enough to read in passing.
+    static func activityWing(for kind: LiveActivity.Kind) -> CGFloat {
+        kind == .media ? 40 : 64
+    }
 
-    var activitySize: CGSize {
-        CGSize(width: notchSize.width + 2 * Self.activityWing, height: notchSize.height)
+    func activitySize(for kind: LiveActivity.Kind) -> CGSize {
+        CGSize(width: notchSize.width + 2 * Self.activityWing(for: kind), height: notchSize.height)
     }
 
     /// Hover target while collapsed, in global screen coordinates. Slightly

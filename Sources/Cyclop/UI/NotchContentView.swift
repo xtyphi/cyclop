@@ -24,7 +24,7 @@ struct NotchContentView: View {
     }
     private var size: CGSize {
         if showsNotice { return panel.geometry.alertSize }
-        if activityKind != nil { return panel.geometry.activitySize }
+        if let kind = activityKind { return panel.geometry.activitySize(for: kind) }
         return panel.bodySize
     }
     /// The island's outer size, shoulders included. Folded, the shoulders sit
@@ -139,7 +139,7 @@ struct NotchContentView: View {
             Spacer(minLength: 0)
             if let kind = activityKind {
                 activityWing(kind, leading: false) {
-                    LiveActivityWings.Trailing(kind: kind, focus: vm.focus, media: vm.media)
+                    LiveActivityWings.Trailing(kind: kind, focus: vm.focus, media: vm.media, height: panel.geometry.notchSize.height)
                 }
             }
             if showsNotice {
@@ -194,7 +194,7 @@ struct NotchContentView: View {
         } label: {
             content()
                 .padding(leading ? .leading : .trailing, inset)
-                .frame(width: NotchGeometry.activityWing, height: panel.geometry.notchSize.height,
+                .frame(width: NotchGeometry.activityWing(for: kind), height: panel.geometry.notchSize.height,
                        alignment: leading ? .leading : .trailing)
                 .contentShape(Rectangle())
         }

@@ -84,6 +84,8 @@ enum LiveActivityWings {
         let kind: LiveActivity.Kind
         @ObservedObject var focus: FocusTimer
         @ObservedObject var media: MediaController
+        /// Height of the strip the clock sits in.
+        var height: CGFloat = 32
 
         var body: some View {
             switch kind {
@@ -93,7 +95,10 @@ enum LiveActivityWings {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let text = FocusPane.clock(left(at: context.date))
                     Text(text)
-                        .font(.system(size: Theme.body, weight: .semibold).monospacedDigit())
+                        // As large as the strip allows, up to 16: read in
+                        // passing, from the corner of an eye.
+                        .font(.system(size: min(16, height - 6), weight: .medium).monospacedDigit())
+                        .minimumScaleFactor(0.65)
                         .foregroundStyle(focus.isPaused ? Theme.secondary : LiveActivityWings.tint(for: focus.phase))
                         .lineLimit(1)
                         .fixedSize()
