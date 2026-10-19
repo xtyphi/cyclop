@@ -114,7 +114,7 @@ final class SystemVolume: ObservableObject {
         var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
         guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids) == noErr else { return }
         let found = ids.compactMap { id -> Output? in
-            guard Self.hasOutputStreams(id), let name = Self.name(of: id) else { return nil }
+            guard Self.hasOutputStreams(id), !Self.isPrivate(id), let name = Self.name(of: id) else { return nil }
             return Output(id: id, name: name)
         }
         if found != outputs { outputs = found }
@@ -139,6 +139,23 @@ final class SystemVolume: ObservableObject {
         )
         var size: UInt32 = 0
         return AudioObjectGetPropertyDataSize(id, &address, 0, nil, &size) == noErr && size > 0
+    }
+
+    /// A private aggregate is visible only to the process that made it —
+    /// Cyclop's own, through which the equalizer bars hear the music. It is
+    /// plumbing, not somewhere to send sound, and nobody else lists it.
+    private static func isPrivate(_ id: AudioObjectID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioAggregateDevicePropertyComposition,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        guard AudioObjectHasProperty(id, &address) else { return false }
+        var composition: Unmanaged<CFDictionary>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFDictionary>?>.size)
+        guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &composition) == noErr,
+              let dictionary = composition?.takeRetainedValue() as? [String: Any] else { return false }
+        return (dictionary[kAudioAggregateDeviceIsPrivateKey] as? NSNumber)?.boolValue ?? false
     }
 
     private static func name(of id: AudioObjectID) -> String? {

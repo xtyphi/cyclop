@@ -248,6 +248,25 @@ final class NotchScreenPanel {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: NSMenu.didBeginTrackingNotification)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.state.isOpen else { return }
+                    self.isMenuOpen = true
+                }
+            }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.isMenuOpen else { return }
+                    self.isMenuOpen = false
+                    // The pointer decides again, from wherever the choice left it.
+                    self.scheduleCollapseIfPointerAway()
+                }
+            }
+            .store(in: &cancellables)
+
         // Driven by the deliberate request, not by which tab is showing: a
         // hover can land on the typing tab now, and that alone must not take
         // the keyboard away from the window underneath.
@@ -282,7 +301,12 @@ final class NotchScreenPanel {
 
     /// Whether something other than the pointer holds this screen open: a
     /// running script, or the clipboard shortcut.
-    private var holdsOpen: Bool { (isPinned && vm.holdsOpen) || isSummoned }
+    private var holdsOpen: Bool { (isPinned && vm.holdsOpen) || isSummoned || isMenuOpen }
+
+    /// A menu opened from the panel — the output picker — is up. It hangs
+    /// below the island, so the pointer choosing from it is off the panel by
+    /// every rect, and folding the island there took the menu away mid-choice.
+    private var isMenuOpen = false
 
     /// The clipboard shortcut: the history, open, with the caret in search.
     /// Pressed again while it is up, it closes it.
