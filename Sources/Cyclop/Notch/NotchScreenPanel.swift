@@ -252,6 +252,7 @@ final class NotchScreenPanel {
             .sink { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self, self.state.isOpen else { return }
+                    self.menuRelease?.cancel()
                     self.isMenuOpen = true
                 }
             }
@@ -260,9 +261,16 @@ final class NotchScreenPanel {
             .sink { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self, self.isMenuOpen else { return }
-                    self.isMenuOpen = false
-                    // The pointer decides again, from wherever the choice left it.
-                    self.scheduleCollapseIfPointerAway()
+                    // The pointer decides again, from wherever the choice left
+                    // it — once the grace is over.
+                    let release = DispatchWorkItem { [weak self] in
+                        guard let self else { return }
+                        self.isMenuOpen = false
+                        self.scheduleCollapseIfPointerAway(after: 0)
+                    }
+                    self.menuRelease?.cancel()
+                    self.menuRelease = release
+                    DispatchQueue.main.asyncAfter(deadline: .now() + Self.menuGrace, execute: release)
                 }
             }
             .store(in: &cancellables)
@@ -306,7 +314,13 @@ final class NotchScreenPanel {
     /// A menu opened from the panel — the output picker — is up. It hangs
     /// below the island, so the pointer choosing from it is off the panel by
     /// every rect, and folding the island there took the menu away mid-choice.
+    ///
+    /// Held for a moment after the menu closes, too: the choice is made with
+    /// the pointer below the island, and the way back to it should not race
+    /// the fold.
     private var isMenuOpen = false
+    private var menuRelease: DispatchWorkItem?
+    private static let menuGrace: TimeInterval = 2
 
     /// The clipboard shortcut: the history, open, with the caret in search.
     /// Pressed again while it is up, it closes it.
@@ -483,8 +497,8 @@ final class NotchScreenPanel {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45, execute: work)
     }
 
-    private func scheduleCollapseIfPointerAway() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+    private func scheduleCollapseIfPointerAway(after delay: TimeInterval = 0.6) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self else { return }
             // Resync either way. A pointer that is still on the panel has to be
             // recorded as inside, or hover tracking stays convinced it left and

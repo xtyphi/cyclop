@@ -115,6 +115,10 @@ final class SystemVolume: ObservableObject {
         guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids) == noErr else { return }
         let found = ids.compactMap { id -> Output? in
             guard Self.hasOutputStreams(id), !Self.isPrivate(id), let name = Self.name(of: id) else { return nil }
+            // A monitor announces an audio output over its cable whether or
+            // not it has anything to play it on, and most have nothing. Left
+            // out unless it is where the sound already goes.
+            if Self.isDisplayAudio(id), id != currentOutput { return nil }
             return Output(id: id, name: name)
         }
         if found != outputs { outputs = found }
@@ -156,6 +160,18 @@ final class SystemVolume: ObservableObject {
         guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &composition) == noErr,
               let dictionary = composition?.takeRetainedValue() as? [String: Any] else { return false }
         return (dictionary[kAudioAggregateDeviceIsPrivateKey] as? NSNumber)?.boolValue ?? false
+    }
+
+    private static func isDisplayAudio(_ id: AudioObjectID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyTransportType,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var transport: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &transport) == noErr else { return false }
+        return transport == kAudioDeviceTransportTypeDisplayPort || transport == kAudioDeviceTransportTypeHDMI
     }
 
     private static func name(of id: AudioObjectID) -> String? {

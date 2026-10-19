@@ -95,7 +95,7 @@ final class PanelState: ObservableObject {
     }
 
     var leftButtons: [Button] { [.sections] + tabs([.focus]) }
-    var rightButtons: [Button] { tabs([.settings, .clipboard]) }
+    var rightButtons: [Button] { tabs([.settings, .shelf]) }
     var bottomButtons: [Button] { tabs([.media]) }
 
     private func tabs(_ list: [NotchViewModel.Tab]) -> [Button] {
