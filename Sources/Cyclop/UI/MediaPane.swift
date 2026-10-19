@@ -10,41 +10,52 @@ struct MediaPane: View {
     @State private var scrubHover = false
     /// Set while dragging, so the bar follows the finger instead of the clock.
     @State private var scrubbing: Double?
+    /// The cover's own colour, for the progress bar. White for a cover with
+    /// no colour to speak of.
+    @State private var tint = Color.white
 
     /// Artwork and the text column share this height, so their top and bottom
     /// edges line up instead of the column floating past them.
-    private let blockHeight: CGFloat = 122
+    private let blockHeight: CGFloat = 112
 
     var body: some View {
         if let track = media.track {
-            HStack(spacing: 18) {
-                reveal { artwork(for: track) }
-                VStack(alignment: .leading, spacing: 0) {
-                    reveal {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(track.title)
-                                .font(.system(size: Theme.title, weight: .semibold))
-                                .foregroundStyle(.white)
-                                .lineLimit(1)
-                            Text(subtitle(for: track))
-                                .font(.system(size: Theme.body))
-                                .foregroundStyle(Theme.secondary)
-                                .lineLimit(1)
+            VStack(spacing: 12) {
+                HStack(alignment: .top, spacing: 16) {
+                    reveal { artwork(for: track) }
+                    VStack(alignment: .leading, spacing: 0) {
+                        reveal {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(track.title)
+                                    .font(.system(size: Theme.title, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                Text(subtitle(for: track))
+                                    .font(.system(size: Theme.body))
+                                    .foregroundStyle(Theme.secondary)
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                         }
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                        // Where the song is, right under what the song is.
+                        scrubber
+                            .padding(.top, 10)
+                        Spacer(minLength: 2)
+                        controls
                     }
-
-                    Spacer(minLength: 6)
-                    controls
-                    Spacer(minLength: 6)
-                    scrubber
+                    .frame(height: blockHeight)
                 }
-                .frame(height: blockHeight)
+                bottomRow
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.top, 2)
             // Title and artist arrive together, so the whole column can cross-
             // fade as one unit when the track changes.
             .animation(Theme.artworkAnimation, value: track.key)
+            .onAppear { tint = ArtworkTint.color(of: media.artwork) }
+            .onChange(of: media.artwork) { _, image in
+                withAnimation(Theme.artworkAnimation) { tint = ArtworkTint.color(of: image) }
+            }
         } else {
             emptyState
         }
@@ -109,7 +120,7 @@ struct MediaPane: View {
                 SkeletonBox(cornerRadius: Theme.radiusXL)
             }
         }
-        .frame(width: 118, height: 118)
+        .frame(width: blockHeight, height: blockHeight)
         .clipShape(RoundedRectangle(cornerRadius: Theme.radiusXL, style: .continuous))
         // The same shape again, this time for the pointer. `clipShape` hides
         // overflow but does not stop it being touched, and that overhang once
@@ -122,6 +133,9 @@ struct MediaPane: View {
                 .strokeBorder(Theme.hairline, lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.5), radius: 12, y: 5)
+        // A paused cover steps back a little, as the phone's does.
+        .scaleEffect(media.isPlaying ? 1 : 0.94)
+        .animation(.smooth(duration: 0.3), value: media.isPlaying)
         .animation(Theme.artworkAnimation, value: media.artwork)
     }
 
@@ -134,23 +148,19 @@ struct MediaPane: View {
     }
 
     private var scrubber: some View {
-        HStack(spacing: 10) {
-            Text(formatTime(progress * media.duration))
-                .rollingNumber(formatTime(progress * media.duration))
-                .frame(width: 32, alignment: .leading)
-
+        VStack(spacing: 4) {
             GeometryReader { geo in
                 let width = geo.size.width
                 let filled = width * progress
-                let height: CGFloat = scrubHover ? 6 : 4
+                let height: CGFloat = scrubHover ? 7 : 5
 
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Theme.surface).frame(height: height)
+                    Capsule().fill(Color.white.opacity(0.14)).frame(height: height)
                     // Deliberately unanimated: a seek has to land under the
                     // cursor at once. Smoothness comes from the tick rate
                     // instead, which keeps each step well under a pixel.
                     Capsule()
-                        .fill(Color.white.opacity(0.9))
+                        .fill(tint.opacity(0.92))
                         .frame(width: filled, height: height)
                     if scrubHover {
                         Circle()
@@ -181,13 +191,19 @@ struct MediaPane: View {
                 )
                 .animation(Theme.contentAnimation, value: scrubHover)
             }
-            .frame(height: 14)
+            .frame(height: 12)
 
-            Text(formatTime(media.duration))
-                .frame(width: 32, alignment: .trailing)
+            HStack {
+                Text(formatTime(progress * media.duration))
+                    .rollingNumber(formatTime(progress * media.duration))
+                Spacer()
+                // What is left rather than the length: the number that
+                // changes is the one worth reading.
+                Text("−" + formatTime(max(media.duration - progress * media.duration, 0)))
+            }
+            .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
+            .foregroundStyle(Theme.tertiary)
         }
-        .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
-        .foregroundStyle(Theme.tertiary)
     }
 
     // MARK: - Transport
@@ -198,26 +214,50 @@ struct MediaPane: View {
     /// looks live and does nothing says "broken". The system's own Now Playing
     /// widget dims the same two arrows on the same session.
     private var controls: some View {
-        HStack(spacing: 20) {
-            Button { media.previous() } label: { Image(systemName: "backward.fill") }
-                .buttonStyle(NotchButtonStyle(size: 30))
-                .disabled(!media.canSkip)
-                .opacity(media.canSkip ? 1 : 0.35)
+        HStack(spacing: 26) {
+            Button { media.previous() } label: {
+                Image(systemName: "backward.end.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+            }
+            .buttonStyle(IslandPressStyle(shape: Circle()))
+            .disabled(!media.canSkip)
+            .opacity(media.canSkip ? 1 : 0.35)
+
             Button { media.togglePlayPause() } label: {
                 Image(systemName: media.isPlaying ? "pause.fill" : "play.fill")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(.black)
                     .contentTransition(.symbolEffect(.replace))
+                    .frame(width: 40, height: 40)
+                    .background(Circle().fill(.white))
             }
-            .buttonStyle(NotchButtonStyle(size: 40, prominent: true))
-            Button { media.next() } label: { Image(systemName: "forward.fill") }
-                .buttonStyle(NotchButtonStyle(size: 30))
-                .disabled(!media.canSkip)
-                .opacity(media.canSkip ? 1 : 0.35)
+            .buttonStyle(IslandPressStyle(shape: Circle()))
+            .animation(.smooth(duration: 0.22), value: media.isPlaying)
+
+            Button { media.next() } label: {
+                Image(systemName: "forward.end.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 34, height: 34)
+            }
+            .buttonStyle(IslandPressStyle(shape: Circle()))
+            .disabled(!media.canSkip)
+            .opacity(media.canSkip ? 1 : 0.35)
         }
         .frame(maxWidth: .infinity)
-        // Volume sits at the trailing edge, over the row rather than in it, so
-        // the transport stays centred on the column as before.
-        .overlay(alignment: .trailing) { VolumeControl(volume: volume) }
         .animation(.easeInOut(duration: 0.15), value: media.canSkip)
+    }
+
+    /// The volume across the bottom, and where the sound goes.
+    private var bottomRow: some View {
+        HStack(spacing: 12) {
+            VolumeControl(volume: volume, barWidth: 240, barHeight: 8)
+            Spacer(minLength: 0)
+            OutputPicker(volume: volume)
+        }
+        .frame(height: 26)
     }
 
     private var emptyState: some View {
@@ -232,6 +272,86 @@ struct MediaPane: View {
                 .foregroundStyle(Theme.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// Where the Mac's sound goes: the device now, and the others on click.
+private struct OutputPicker: View {
+    @ObservedObject var volume: SystemVolume
+
+    private var current: SystemVolume.Output? {
+        volume.outputs.first { $0.id == volume.currentOutput }
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(volume.outputs) { output in
+                Button {
+                    volume.selectOutput(output.id)
+                } label: {
+                    if output.id == volume.currentOutput {
+                        Label(output.name, systemImage: "checkmark")
+                    } else {
+                        Text(output.name)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "hifispeaker.fill")
+                    .font(.system(size: 11, weight: .medium))
+                Text(current?.name ?? localized("Output"))
+                    .font(.system(size: Theme.footnote, weight: .medium))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundStyle(Color.white.opacity(0.85))
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(Capsule().fill(Color.white.opacity(0.08)))
+            .contentShape(Capsule())
+        }
+        .menuStyle(.button)
+        .buttonStyle(IslandPressStyle(shape: Capsule(), lifts: false))
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .frame(maxWidth: 200, alignment: .trailing)
+        .help(localized("Output"))
+        .onAppear { volume.refreshOutputs() }
+        .onHover { if $0 { volume.refreshOutputs() } }
+    }
+}
+
+/// The colour a cover is known by, picked from a thumbnail of it: the most
+/// vivid of its reasonably bright pixels, lifted until it reads on black.
+enum ArtworkTint {
+    static func color(of image: NSImage?) -> Color {
+        guard let image,
+              let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return .white }
+        let side = 12
+        var pixels = [UInt8](repeating: 0, count: side * side * 4)
+        guard let context = CGContext(
+            data: &pixels, width: side, height: side, bitsPerComponent: 8, bytesPerRow: side * 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return .white }
+        context.draw(cg, in: CGRect(x: 0, y: 0, width: side, height: side))
+
+        var best: (score: CGFloat, hue: CGFloat, saturation: CGFloat)?
+        for i in stride(from: 0, to: pixels.count, by: 4) {
+            let color = NSColor(
+                red: CGFloat(pixels[i]) / 255, green: CGFloat(pixels[i + 1]) / 255,
+                blue: CGFloat(pixels[i + 2]) / 255, alpha: 1
+            )
+            var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0
+            color.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: nil)
+            guard brightness > 0.25 else { continue }
+            let score = saturation * brightness
+            if score > (best?.score ?? 0) { best = (score, hue, saturation) }
+        }
+        // A grey, black or white cover has no colour to lend.
+        guard let best, best.saturation > 0.3 else { return .white }
+        return Color(hue: Double(best.hue), saturation: Double(min(best.saturation, 0.75)), brightness: 0.95)
     }
 }
 

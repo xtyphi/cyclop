@@ -59,6 +59,7 @@ final class PanelState: ObservableObject {
         if showsSections { return geometry.sectionsBodySize(tabs: sections.count) }
         switch vm.tab {
         case .teleprompter: return geometry.tallExpandedSize
+        case .media: return geometry.mediaExpandedSize
         case .clipboard: return geometry.clipboardExpandedSize
         default: return geometry.expandedSize
         }

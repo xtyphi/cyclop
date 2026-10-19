@@ -13,7 +13,10 @@ struct VolumeControl: View {
     /// listener round-trip behind it.
     @State private var dragging: Float?
 
-    private let barWidth: CGFloat = 64
+    /// The bar's length, and how thick it stands at rest. The player's own
+    /// row gives it the width of the panel; elsewhere it is a short bar.
+    var barWidth: CGFloat = 64
+    var barHeight: CGFloat = 4
 
     private var shown: Float {
         dragging ?? (volume.isMuted ? 0 : volume.level)
@@ -30,7 +33,7 @@ struct VolumeControl: View {
         HStack(spacing: 6) {
             Button { volume.toggleMute() } label: {
                 Image(systemName: symbol)
-                    .font(.system(size: 10, weight: .medium))
+                    .font(.system(size: barHeight > 4 ? 12 : 10, weight: .medium))
                     .contentTransition(.symbolEffect(.replace))
                     .foregroundStyle(Theme.secondary)
                     .frame(width: 18, height: 18, alignment: .leading)
@@ -39,7 +42,7 @@ struct VolumeControl: View {
             .buttonStyle(.plain)
             .pointerStyle(.default)
 
-            let height: CGFloat = hover ? 6 : 4
+            let height: CGFloat = hover ? barHeight + 2 : barHeight
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.surface).frame(height: height)
                 Capsule()

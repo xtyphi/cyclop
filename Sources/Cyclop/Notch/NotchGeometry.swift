@@ -46,6 +46,13 @@ struct NotchGeometry {
     var tallExpandedSize: CGSize {
         CGSize(width: expandedSize.width, height: Self.tallBodyHeight)
     }
+    /// Body for the player: cut to it, so the island ends where the volume
+    /// row does instead of leaving a band of black under it. Cover and its
+    /// column, the volume row, and the gaps between.
+    var mediaExpandedSize: CGSize {
+        CGSize(width: expandedSize.width, height: notchSize.height + 2 + 112 + 12 + 26 + Self.bodyBottomPadding)
+    }
+
     /// Body for the clipboard history: 40 % of the screen down — a third
     /// first, then a fifth more on request — so a week of copies shows a
     /// dozen lines at a time. Same width as the rest, for the same reason as

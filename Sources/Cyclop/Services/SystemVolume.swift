@@ -17,6 +17,14 @@ final class SystemVolume: ObservableObject {
     @Published private(set) var isMuted = false
     /// False for outputs with no software volume — HDMI and some USB DACs.
     @Published private(set) var isAvailable = false
+    /// Every device sound can go to, and the one it goes to now.
+    @Published private(set) var outputs: [Output] = []
+    @Published private(set) var currentOutput = AudioObjectID(kAudioObjectUnknown)
+
+    struct Output: Identifiable, Hashable {
+        let id: AudioObjectID
+        let name: String
+    }
 
     private var device = AudioObjectID(kAudioObjectUnknown)
     private var listening = false
@@ -90,6 +98,62 @@ final class SystemVolume: ObservableObject {
         if status == noErr { isMuted = muted }
     }
 
+    // MARK: - Outputs
+
+    /// Re-reads the list. Asked for when the picker is about to show rather
+    /// than kept live: headphones come and go, and nobody looks at the list
+    /// in between.
+    func refreshOutputs() {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size) == noErr else { return }
+        var ids = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids) == noErr else { return }
+        let found = ids.compactMap { id -> Output? in
+            guard Self.hasOutputStreams(id), let name = Self.name(of: id) else { return nil }
+            return Output(id: id, name: name)
+        }
+        if found != outputs { outputs = found }
+    }
+
+    /// Sends the Mac's sound to this device, as choosing it in Control Centre
+    /// does. The volume follows on its own: the default-device listener
+    /// rebinds to it.
+    func selectOutput(_ id: AudioObjectID) {
+        var target = id
+        AudioObjectSetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &Self.defaultOutputAddress, 0, nil,
+            UInt32(MemoryLayout<AudioObjectID>.size), &target
+        )
+    }
+
+    private static func hasOutputStreams(_ id: AudioObjectID) -> Bool {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreams,
+            mScope: kAudioObjectPropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        return AudioObjectGetPropertyDataSize(id, &address, 0, nil, &size) == noErr && size > 0
+    }
+
+    private static func name(of id: AudioObjectID) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioObjectPropertyName,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var name: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &name) == noErr,
+              let value = name?.takeRetainedValue() as String?, !value.isEmpty else { return nil }
+        return value
+    }
+
     // MARK: - Device
 
     private func bindDefaultDevice() {
@@ -107,6 +171,7 @@ final class SystemVolume: ObservableObject {
         }
         unbindDevice()
         device = id
+        currentOutput = id
 
         let listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
             MainActor.assumeIsolated { self?.read() }
