@@ -2,19 +2,12 @@ import SwiftUI
 import AppKit
 
 enum Theme {
-    static let openAnimation = Animation.spring(response: 0.27, dampingFraction: 0.82)
+    // The island's own motion — open, close, resize — is not here: it runs
+    // on two springs of its own, see `IslandMotion`.
     static let contentAnimation = Animation.easeOut(duration: 0.16)
-    /// Pane switching: the outgoing pane leaves faster than the incoming one
-    /// arrives, so the two are never both half-visible for long.
-    static let paneAnimation = Animation.easeOut(duration: 0.18)
-    static let paneIn = Animation.easeOut(duration: 0.20).delay(0.04)
-    static let paneOut = Animation.easeIn(duration: 0.12)
+    /// Pane switching: a short cross-fade, the same in both directions.
+    static let paneSwap = Animation.easeInOut(duration: 0.18)
     static let artworkAnimation = Animation.easeOut(duration: 0.28)
-
-    static let collapsedTopRadius: CGFloat = 6
-    static let collapsedBottomRadius: CGFloat = 9
-    static let openTopRadius: CGFloat = 12
-    static let openBottomRadius: CGFloat = 22
 
     // Type scale. Six steps for every word in the panel: before there was a
     // scale, fourteen sizes had grown pane by pane, down to 9 pt, and the

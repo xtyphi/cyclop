@@ -27,49 +27,83 @@ struct NotchContentView: View {
         if activityKind != nil { return panel.geometry.activitySize }
         return panel.bodySize
     }
-    private var topRadius: CGFloat { isOpen ? Theme.openTopRadius : Theme.collapsedTopRadius }
+    /// The island's outer size, shoulders included. Folded, the shoulders sit
+    /// inside the notch's own width; open, they flare out past the body.
+    private var outerSize: CGSize {
+        guard isOpen else { return size }
+        return CGSize(width: size.width + 2 * NotchShape.shoulder(forHeight: size.height), height: size.height)
+    }
+    /// A synthetic notch has content underneath it — a full-screen app on an
+    /// external display — so at rest it is drawn transparent and only turns
+    /// black once the panel opens.
+    private var fillOpacity: Double { isOpen || showsNotice || panel.geometry.isPhysical ? 1 : 0 }
+
+    @StateObject private var motion = IslandMotion()
 
     var body: some View {
-        // The shape is wider than the body by `topRadius` on each side: that
-        // slack is where the concave shoulders live, so it must not be clipped.
+        // Only the outline moves. Each layer is laid out once, at the size it
+        // is going to have, and the outline reveals it: the panes never
+        // re-lay themselves out on every frame of the spring.
         ZStack(alignment: .top) {
-            NotchShape(
-                topRadius: topRadius,
-                bottomRadius: isOpen ? Theme.openBottomRadius : Theme.collapsedBottomRadius
-            )
-            // A synthetic notch has content underneath it — a full-screen app on
-            // an external display — so at rest it is drawn transparent and only
-            // turns black once the panel opens.
-            .fill(Color.black.opacity(isOpen || showsNotice || panel.geometry.isPhysical ? 1 : 0))
-            .frame(width: size.width + 2 * topRadius, height: size.height)
-            .shadow(color: .black.opacity(isOpen ? 0.5 : 0), radius: 18, y: 8)
+            IslandSilhouette(motion: motion)
+                .opacity(fillOpacity)
+                .animation(.easeOut(duration: 0.26), value: fillOpacity)
 
-            VStack(spacing: 0) {
-                header
+            ZStack(alignment: .top) {
                 if isOpen {
-                    content
-                        .transition(.opacity)
-                        // Open, the notice floats over the top of the pane
-                        // rather than in the header strip, which is kept free
-                        // of anything clickable (see below).
-                        .overlay(alignment: .top) {
-                            if let kind = alert.current {
-                                FocusNotice(kind: kind, dismiss: alert.dismiss)
-                                    .padding(.top, 4)
-                                    .transition(.opacity)
-                            }
-                        }
+                    openLayer
+                        .modifier(IslandArrival())
+                        // Gone at once on close: the outline is already
+                        // folding over it, and a fade would only smear it.
+                        .transition(.identity)
+                } else {
+                    foldedLayer
+                        // Back once the outline has arrived, not while it is
+                        // still pulling up past the strip.
+                        .transition(.asymmetric(
+                            insertion: .opacity.animation(.easeOut(duration: 0.14).delay(0.26)),
+                            removal: .identity
+                        ))
                 }
             }
-            .frame(width: size.width, height: size.height, alignment: .top)
-            .clipped()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .mask(IslandSilhouette(motion: motion))
         }
-        .frame(width: size.width + 2 * topRadius, height: size.height, alignment: .top)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .animation(Theme.openAnimation, value: isOpen)
-        .animation(Theme.openAnimation, value: alert.current)
-        .animation(Theme.openAnimation, value: activityKind)
-        .animation(Theme.paneAnimation, value: vm.tab)
+        .onAppear { motion.set(outerSize, animated: false) }
+        .onChange(of: outerSize) { _, target in motion.set(target) }
+    }
+
+    // MARK: - Layers
+
+    /// The open panel, at the full size of the tab on screen.
+    private var openLayer: some View {
+        let body = panel.openBodySize
+        return VStack(spacing: 0) {
+            openHeader
+            content
+                // Open, the notice floats over the top of the pane rather
+                // than in the header strip, which is kept free of anything
+                // clickable (see below).
+                .overlay(alignment: .top) {
+                    if let kind = alert.current {
+                        FocusNotice(kind: kind, dismiss: alert.dismiss)
+                            .padding(.top, 4)
+                            .transition(.opacity)
+                    }
+                }
+                .animation(.easeOut(duration: 0.2), value: alert.current)
+        }
+        .frame(width: body.width, height: body.height, alignment: .top)
+    }
+
+    /// The folded notch: bare, or with the timer, the song or the notice on
+    /// its sides.
+    private var foldedLayer: some View {
+        foldedHeader
+            .frame(width: size.width, height: size.height, alignment: .top)
+            .animation(.easeOut(duration: 0.2), value: activityKind)
+            .animation(.easeOut(duration: 0.2), value: alert.current)
     }
 
     // MARK: - Header
@@ -80,7 +114,7 @@ struct NotchContentView: View {
     // clicking here toggles them as a side effect. Nothing interactive goes in
     // this row; the tab switcher lives in the rail below.
 
-    private var header: some View {
+    private var foldedHeader: some View {
         HStack(spacing: 0) {
             // The one exception to the rule above, and only folded, for three
             // seconds: the notice needs a close button, and the notch is where
@@ -96,23 +130,7 @@ struct NotchContentView: View {
                     LiveActivityWings.Leading(kind: kind, focus: vm.focus, media: vm.media)
                 }
             }
-            if isOpen {
-                Text(vm.tab.title.uppercased())
-                    .font(.system(size: Theme.caption, weight: .semibold))
-                    .tracking(0.8)
-                    .foregroundStyle(Theme.tertiary)
-                    .padding(.leading, 16)
-                    .id(vm.tab)
-                    .transition(.opacity)
-            }
             Spacer(minLength: 0)
-            Color.clear.frame(width: panel.geometry.notchSize.width, height: 1)
-            Spacer(minLength: 0)
-            if isOpen {
-                trailing
-                    .padding(.trailing, 16)
-                    .transition(.opacity)
-            }
             if let kind = activityKind {
                 activityWing(kind, leading: false) {
                     LiveActivityWings.Trailing(kind: kind, focus: vm.focus, media: vm.media)
@@ -128,6 +146,25 @@ struct NotchContentView: View {
         .frame(height: panel.geometry.notchSize.height)
     }
 
+    private var openHeader: some View {
+        HStack(spacing: 0) {
+            Text(vm.tab.title.uppercased())
+                .font(.system(size: Theme.caption, weight: .semibold))
+                .tracking(0.8)
+                .foregroundStyle(Theme.tertiary)
+                .padding(.leading, 16)
+                .id(vm.tab)
+                .transition(.opacity)
+            Spacer(minLength: 0)
+            Color.clear.frame(width: panel.geometry.notchSize.width, height: 1)
+            Spacer(minLength: 0)
+            trailing
+                .padding(.trailing, 16)
+        }
+        .frame(height: panel.geometry.notchSize.height)
+        .animation(Theme.paneSwap, value: vm.tab)
+    }
+
     /// One side of the folded notch's activity. A click on either side
     /// opens the panel on the tab it came from, as a tap on the Dynamic
     /// Island opens the app.
@@ -138,7 +175,10 @@ struct NotchContentView: View {
     /// centred they stood 16 pt and 13 pt from the edges, which read as the
     /// whole island sitting off to one side.
     private func activityWing(_ kind: LiveActivity.Kind, leading: Bool, @ViewBuilder content: () -> some View) -> some View {
-        let inset = max((panel.geometry.notchSize.height - 22) / 2, 6)
+        // Clear of the outline: the shoulders now sit inside the folded
+        // width, so the content keeps 5 pt from the wall they curve into.
+        let height = panel.geometry.notchSize.height
+        let inset = max((height - 22) / 2, NotchShape.shoulder(forHeight: height) + 5)
         return Button {
             panel.onActivate?(kind == .focus ? .focus : .media)
         } label: {
@@ -223,19 +263,13 @@ struct NotchContentView: View {
     }
 
     private var panes: some View {
-        // Content is replaced in place — no travel. The rail is vertical and
-        // the panes are unrelated, so a direction would only be decoration.
+        // Content is replaced in place — a plain cross-fade, no travel and no
+        // zoom. The rail is vertical and the panes are unrelated, so either
+        // would only be decoration.
         ZStack {
             pane
                 .id(vm.tab)
-                .transition(.asymmetric(
-                    insertion: .opacity
-                        .combined(with: .scale(scale: 0.97))
-                        .animation(Theme.paneIn),
-                    removal: .opacity
-                        .combined(with: .scale(scale: 1.02))
-                        .animation(Theme.paneOut)
-                ))
+                .transition(.opacity.animation(Theme.paneSwap))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()

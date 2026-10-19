@@ -384,7 +384,11 @@ final class NotchScreenPanel {
             // Grow the interactive area first so the pointer never falls
             // through a region the animation has not covered yet.
             applyActiveRect(open: true)
-            withAnimation(Theme.openAnimation) { state.isOpen = true }
+            // No SwiftUI animation: the outline moves on its own springs and
+            // the content brings itself in (`IslandMotion`, `IslandArrival`).
+            // An animated transaction here would also animate every frame
+            // inside the panel, which is the reflow this is built to avoid.
+            state.isOpen = true
             // The history is opened to search it, by hover as much as by the
             // shortcut, so it takes the caret on arrival. A pass later: this
             // runs inside the open that the keyboard request would start.
@@ -415,7 +419,7 @@ final class NotchScreenPanel {
     /// The visual half of closing, one pass after the keyboard was let go.
     private func collapse() {
         guard state.isOpen else { return }
-        withAnimation(Theme.openAnimation) { state.isOpen = false }
+        state.isOpen = false
 
         // The keyboard goes back only now, a pass after the fold has started:
         // `acceptsKeyboard` no longer does it on its own, precisely because the
@@ -484,7 +488,7 @@ final class NotchScreenPanel {
             // Slack so the concave shoulders stay grabbable. Never while
             // collapsed: that would swallow clicks on menu bar items next to
             // the notch.
-            rect = rect.insetBy(dx: -Theme.openTopRadius, dy: 0)
+            rect = rect.insetBy(dx: -NotchShape.maxShoulder, dy: 0)
         }
         rootView.activeRect = rect
         // Follows the folded shape for the timer or the song on its sides. Not
@@ -497,6 +501,6 @@ final class NotchScreenPanel {
         }
         pointer.interactiveRect = geometry
             .contentScreenRect(for: size)
-            .insetBy(dx: open ? -Theme.openTopRadius : 0, dy: 0)
+            .insetBy(dx: open ? -NotchShape.maxShoulder : 0, dy: 0)
     }
 }

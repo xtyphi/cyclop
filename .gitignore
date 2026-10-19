@@ -13,3 +13,4 @@ build/
 *.key
 *.mobileprovision
 *.certSigningRequest
+_work/
