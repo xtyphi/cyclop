@@ -321,6 +321,8 @@ final class NotchScreenPanel {
     private var isMenuOpen = false
     private var menuRelease: DispatchWorkItem?
     private static let menuGrace: TimeInterval = 2
+    /// How far past a round button the pointer may stray and still be on the panel.
+    private static let buttonSlack: CGFloat = 36
 
     /// The clipboard shortcut: the history, open, with the caret in search.
     /// Pressed again while it is up, it closes it.
@@ -433,6 +435,12 @@ final class NotchScreenPanel {
             // Grow the interactive area first so the pointer never falls
             // through a region the animation has not covered yet.
             applyActiveRect(open: true)
+            // The tab may have changed while the panel was folded — a drop
+            // picks the shelf, a shortcut the clipboard — and the tab sink
+            // only re-cuts an open panel. Left as it was, the rect is the last
+            // tab's, and the part of this body or its buttons beyond it reads
+            // as the pointer leaving.
+            pointer.closeRect = openHoverRect
             // No SwiftUI animation: the outline moves on its own springs and
             // the content brings itself in (`IslandMotion`, `IslandArrival`).
             // An animated transaction here would also animate every frame
@@ -528,10 +536,11 @@ final class NotchScreenPanel {
 
     /// Where the pointer counts as still on the open panel: the body, and the
     /// buttons around it with a margin — the pointer crossing the gap on its
-    /// way to a button must not read as leaving.
+    /// way to a button must not read as leaving, and neither must a hand that
+    /// overshoots the button and comes back to it.
     private var openHoverRect: CGRect {
         buttonRects
-            .map { geometry.screenRect($0).insetBy(dx: -16, dy: -16) }
+            .map { geometry.screenRect($0).insetBy(dx: -Self.buttonSlack, dy: -Self.buttonSlack) }
             .reduce(geometry.hoverRect(for: state.openBodySize)) { $0.union($1) }
     }
 
