@@ -72,22 +72,46 @@ final class NotchScreenPanel {
     /// Collapsing also puts hover tracking back in step: nothing moved the
     /// mouse, so nothing else would have.
     func activeSpaceChanged() {
+        rejoinActiveSpace()
         guard state.isOpen else { return }
         // What was typed is kept — only the panel closes.
         setOpen(false)
         pointer.setInside(false)
     }
 
+    /// The panel joins every desktop, full-screen ones included — but only
+    /// the ones it was shown on, or that were made after. A full-screen
+    /// desktop that arrives from elsewhere is neither: closing the lid moves
+    /// the laptop screen's full-screen desktops onto the external display, and
+    /// there the panel was simply missing until the app was relaunched. So
+    /// on every arrival, ask the window server whether the panel is actually
+    /// on screen, and show it again if it is not — which joins it to the
+    /// desktop being looked at, the way launching there does. A moment late,
+    /// because the notice comes before the switch has finished.
+    private func rejoinActiveSpace() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            guard let self, let panel, !isAsleep else { return }
+            let id = CGWindowID(panel.windowNumber)
+            let info = CGWindowListCopyWindowInfo([.optionIncludingWindow], id) as? [[String: Any]]
+            let onScreen = info?.first?[kCGWindowIsOnscreen as String] as? Bool ?? false
+            guard !onScreen else { return }
+            panel.orderOut(nil)
+            panel.orderFrontRegardless()
+        }
+    }
+
     /// A dark display has no hover to watch, so the one timer that never
     /// otherwise stops — the pointer sampler — stops with it. The panel closes
     /// too, so waking always starts from the same, folded state.
     func screensSlept() {
+        isAsleep = true
         setOpen(false)
         pointer.setInside(false)
         pointer.stop()
     }
 
     func screensWoke() {
+        isAsleep = false
         pointer.start()
     }
 
@@ -321,6 +345,8 @@ final class NotchScreenPanel {
     private var isMenuOpen = false
     private var menuRelease: DispatchWorkItem?
     private static let menuGrace: TimeInterval = 2
+    /// Displays dark: nothing is on screen, and nothing should be put back.
+    private var isAsleep = false
     /// How far past a round button the pointer may stray and still be on the panel.
     private static let buttonSlack: CGFloat = 36
 
