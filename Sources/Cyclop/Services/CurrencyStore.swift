@@ -26,6 +26,13 @@ final class CurrencyStore: ObservableObject {
     @Published private(set) var rates: [String: Double] = [:]
     @Published private(set) var rateBase = ""
     @Published private(set) var rateDate: String?
+    /// The Bank of Russia's official rates: roubles for one unit, keyed by
+    /// lowercase code. Any pair with the rouble on one side converts at these
+    /// rather than at the market table — the official rate is the figure
+    /// banks, prices and paperwork in Russia are checked against, and the
+    /// market one moves on days the official one stands still.
+    @Published private(set) var centralBankRates: [String: Double] = [:]
+    @Published private(set) var centralBankDate: String?
     @Published private(set) var isLoading = false
     @Published private(set) var failure: String?
 
@@ -71,6 +78,8 @@ final class CurrencyStore: ObservableObject {
 
     private static let primaryHost = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1"
     private static let fallbackHost = "https://latest.currency-api.pages.dev/v1"
+    /// The official daily rates as JSON, mirrored from cbr.ru's own XML.
+    private static let centralBankURL = "https://www.cbr-xml-daily.ru/daily_json.js"
 
     init() {
         let savedSource = defaults.string(forKey: sourceKey)?.lowercased()
@@ -143,7 +152,7 @@ final class CurrencyStore: ObservableObject {
         // for the new source land. If they are already cached, recompute now.
         sourceText = previousSourceText
         editing = .source
-        if rateBase == sourceCode {
+        if rate(from: sourceCode, to: targetCode) != nil {
             recompute(from: .source)
         }
     }
@@ -167,6 +176,7 @@ final class CurrencyStore: ObservableObject {
         defer { isLoading = false }
         do {
             try await loadCurrencies()
+            await loadCentralBank()
             try await loadRates(for: sourceCode)
             failure = nil
             recompute(from: editing)
@@ -179,6 +189,7 @@ final class CurrencyStore: ObservableObject {
         if !force, rateBase == sourceCode, !rates.isEmpty, !isStaleDate { return }
         do {
             if currencies.isEmpty { try await loadCurrencies() }
+            await loadCentralBank()
             try await loadRates(for: sourceCode)
             failure = nil
             recompute(from: editing)
@@ -256,6 +267,47 @@ final class CurrencyStore: ObservableObject {
         rateDate = best.date
     }
 
+    /// Best effort: without it, rouble pairs fall back to the market table.
+    private func loadCentralBank() async {
+        guard let url = URL(string: Self.centralBankURL),
+              let (data, response) = try? await session.data(for: URLRequest(url: url)),
+              (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? false,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let valutes = object["Valute"] as? [String: [String: Any]] else { return }
+        var table: [String: Double] = [:]
+        for (code, entry) in valutes {
+            // Quoted per 10, 100 or more units for the small ones: yen per 100.
+            guard let value = (entry["Value"] as? NSNumber)?.doubleValue,
+                  let nominal = (entry["Nominal"] as? NSNumber)?.doubleValue,
+                  value > 0, nominal > 0 else { continue }
+            table[code.lowercased()] = value / nominal
+        }
+        guard !table.isEmpty else { return }
+        centralBankRates = table
+        // The day the rate is in force, which is the one the bank names.
+        centralBankDate = (object["Date"] as? String).map { String($0.prefix(10)) }
+    }
+
+    /// One unit of `from` in `to`: the official rate when the rouble is on
+    /// one side and the bank quotes the other, the market table otherwise.
+    private func rate(from: String, to: String) -> Double? {
+        let from = from.lowercased(), to = to.lowercased()
+        if from == "rub", let roubles = centralBankRates[to] { return 1 / roubles }
+        if to == "rub", let roubles = centralBankRates[from] { return roubles }
+        guard rateBase == from, let rate = rates[to], rate > 0 else { return nil }
+        return rate
+    }
+
+    /// Whether the pair on screen converts at the official rate.
+    var usesCentralBank: Bool {
+        let from = sourceCode.lowercased(), to = targetCode.lowercased()
+        return (from == "rub" && centralBankRates[to] != nil)
+            || (to == "rub" && centralBankRates[from] != nil)
+    }
+
+    /// The date of whichever table the pair on screen converts with.
+    var pairDate: String? { usesCentralBank ? centralBankDate : rateDate }
+
     private static func parseRates(_ data: Data, base code: String) throws -> (date: String?, table: [String: Double]) {
         let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let date = object?["date"] as? String
@@ -306,10 +358,7 @@ final class CurrencyStore: ObservableObject {
     private func recompute(from side: Side) {
         // Rates belong to a specific base. Stale tables from the previous
         // source must not invent a conversion.
-        guard rateBase == sourceCode.lowercased(),
-              let rate = rates[targetCode.lowercased()], rate > 0 else {
-            return
-        }
+        guard let rate = rate(from: sourceCode, to: targetCode) else { return }
         switch side {
         case .source:
             let trimmed = sourceText.trimmingCharacters(in: .whitespacesAndNewlines)

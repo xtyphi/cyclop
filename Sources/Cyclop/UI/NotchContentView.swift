@@ -351,8 +351,10 @@ private struct CurrencyRateDate: View {
     @ObservedObject var currencies: CurrencyStore
 
     var body: some View {
-        if let date = currencies.rateDate {
-            Text(date)
+        if let date = currencies.pairDate {
+            // Named when it is the official rate, so a figure that differs
+            // from a market quote elsewhere says why.
+            Text(currencies.usesCentralBank ? "\(localized("CBR")) · \(date)" : date)
                 .font(.system(size: Theme.caption, weight: .medium).monospacedDigit())
                 .foregroundStyle(Theme.tertiary)
         }
