@@ -53,6 +53,8 @@ final class FocusTimer: ObservableObject {
     var preset: Preset { Self.presets[presetIndex] }
     var completedToday: Int { sprints(on: Date()) }
     var isPaused: Bool { pausedRemaining != nil }
+    /// The whole length of the phase now running.
+    var phaseDuration: TimeInterval { phaseLength(phase) }
 
     var remaining: TimeInterval {
         if let pausedRemaining { return pausedRemaining }

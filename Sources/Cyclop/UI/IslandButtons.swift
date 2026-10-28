@@ -11,6 +11,18 @@ import SwiftUI
 struct IslandButtons: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var panel: PanelState
+    // Watched here: the view model forwards nothing of theirs.
+    @ObservedObject private var focus: FocusTimer
+    @ObservedObject private var media: MediaController
+    @ObservedObject private var teleprompter: TeleprompterStore
+
+    init(vm: NotchViewModel, panel: PanelState) {
+        self.vm = vm
+        self.panel = panel
+        focus = vm.focus
+        media = vm.media
+        teleprompter = vm.teleprompter
+    }
 
     var body: some View {
         let geometry = panel.geometry
@@ -41,6 +53,7 @@ struct IslandButtons: View {
         EmergingButton(
             symbol: symbol(for: button),
             isSelected: isSelected(button),
+            activity: activity(for: button),
             help: help(for: button),
             outward: outward
         ) {
@@ -53,8 +66,13 @@ struct IslandButtons: View {
     private func symbol(for button: PanelState.Button) -> String {
         switch button {
         case .sections: return panel.showsSections ? "arrow.uturn.backward" : "square.grid.2x2"
-        case .tab(let tab): return tab.symbol
+        case .tab(let tab): return activity(for: button)?.symbol ?? tab.symbol
         }
+    }
+
+    private func activity(for button: PanelState.Button) -> TabActivity? {
+        guard case .tab(let tab) = button else { return nil }
+        return TabActivity(tab, focus: focus, media: media, teleprompter: teleprompter)
     }
 
     private func isSelected(_ button: PanelState.Button) -> Bool {
@@ -89,6 +107,7 @@ struct EmergingButton: View {
 
     let symbol: String
     let isSelected: Bool
+    var activity: TabActivity?
     let help: String
     let outward: Direction
     let action: () -> Void
@@ -113,10 +132,11 @@ struct EmergingButton: View {
             Button(action: action) {
                 Image(systemName: symbol)
                     .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(activity?.tint ?? .white)
                     .frame(width: NotchGeometry.buttonDiameter, height: NotchGeometry.buttonDiameter)
                     .background(Circle().fill(Color.black))
                     .overlay(Circle().strokeBorder(Color.white.opacity(isSelected ? 0.6 : 0.16), lineWidth: 0.75))
+                    .overlay { if let activity { ActivityRing(activity: activity) } }
                     .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(IslandPressStyle(shape: Circle()))
@@ -128,6 +148,7 @@ struct EmergingButton: View {
         .frame(width: 2 * travel + 2 * Self.radius, height: 2 * travel + 2 * Self.radius)
         .animation(.smooth(duration: 0.22), value: symbol)
         .animation(.easeOut(duration: 0.15), value: isSelected)
+        .animation(.easeOut(duration: 0.2), value: activity)
         .onAppear {
             guard !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
                 progress = 1
@@ -181,10 +202,94 @@ struct EmergingButton: View {
     }
 }
 
+/// What a section is busy with right now — the timer counting, music
+/// playing, the prompter scrolling — for its button and its tile to show.
+struct TabActivity: Equatable {
+    var tint: Color
+    /// Stands in for the section's own symbol.
+    var symbol: String?
+    /// The running clock; the ring shows what is left of it.
+    var span: ClosedRange<Date>?
+    /// What is left, held still while paused.
+    var left: Double?
+
+    static let playing = Color(red: 1.0, green: 0.30, blue: 0.45)
+    static let prompting = Color(red: 0.35, green: 0.65, blue: 1.0)
+
+    @MainActor
+    init?(_ tab: NotchViewModel.Tab, focus: FocusTimer, media: MediaController, teleprompter: TeleprompterStore) {
+        switch tab {
+        case .focus:
+            guard focus.phase != .idle else { return nil }
+            let length = max(focus.phaseDuration, 1)
+            if let paused = focus.pausedRemaining {
+                tint = Theme.secondary
+                symbol = "pause.fill"
+                left = paused / length
+            } else if let endsAt = focus.endsAt {
+                tint = LiveActivityWings.tint(for: focus.phase)
+                symbol = focus.phase == .rest ? "cup.and.saucer.fill" : nil
+                span = endsAt.addingTimeInterval(-length)...endsAt
+            } else {
+                return nil
+            }
+        case .media:
+            guard media.isPlaying else { return nil }
+            tint = Self.playing
+        case .teleprompter:
+            guard teleprompter.isRunning else { return nil }
+            tint = Self.prompting
+        default:
+            return nil
+        }
+    }
+}
+
+/// The ring around a busy button: a timer's time left, or a whole circle in
+/// the section's colour for anything without a clock.
+private struct ActivityRing: View {
+    let activity: TabActivity
+
+    var body: some View {
+        if let span = activity.span {
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                ring(left: span.upperBound.timeIntervalSince(context.date)
+                    / span.upperBound.timeIntervalSince(span.lowerBound))
+            }
+        } else {
+            ring(left: activity.left ?? 1)
+        }
+    }
+
+    private func ring(left: Double) -> some View {
+        ZStack {
+            Circle().stroke(activity.tint.opacity(0.18), lineWidth: 1.5)
+            Circle()
+                .trim(from: 0, to: min(max(left, 0), 1))
+                .stroke(activity.tint, style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+                .animation(.linear(duration: 1), value: left)
+        }
+        .padding(1.5)
+        .allowsHitTesting(false)
+    }
+}
+
 /// Every section as a tile: the way to the ones without a button of their own.
 struct SectionsGallery: View {
     @ObservedObject var vm: NotchViewModel
     @ObservedObject var panel: PanelState
+    @ObservedObject private var focus: FocusTimer
+    @ObservedObject private var media: MediaController
+    @ObservedObject private var teleprompter: TeleprompterStore
+
+    init(vm: NotchViewModel, panel: PanelState) {
+        self.vm = vm
+        self.panel = panel
+        focus = vm.focus
+        media = vm.media
+        teleprompter = vm.teleprompter
+    }
 
     var body: some View {
         let columns = Array(
@@ -197,7 +302,11 @@ struct SectionsGallery: View {
                     Haptics.snap()
                     panel.select(tab)
                 } label: {
-                    SectionTile(tab: tab, isCurrent: tab == vm.tab)
+                    SectionTile(
+                        tab: tab,
+                        isCurrent: tab == vm.tab,
+                        activity: TabActivity(tab, focus: focus, media: media, teleprompter: teleprompter)
+                    )
                 }
                 .buttonStyle(IslandPressStyle(
                     shape: RoundedRectangle(cornerRadius: SectionTile.radius, style: .continuous),
@@ -214,14 +323,16 @@ struct SectionsGallery: View {
 private struct SectionTile: View {
     let tab: NotchViewModel.Tab
     let isCurrent: Bool
+    let activity: TabActivity?
 
     static let radius: CGFloat = 16
 
     var body: some View {
         VStack(spacing: 6) {
-            Image(systemName: tab.symbol)
+            Image(systemName: activity?.symbol ?? tab.symbol)
                 .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(tint)
+                .foregroundStyle(activity?.tint ?? tint)
+                .contentTransition(.symbolEffect(.replace))
                 .frame(width: 25, height: 25)
             Text(tab.title)
                 .font(.system(size: Theme.footnote, weight: .medium))
@@ -250,13 +361,21 @@ private struct SectionTile: View {
                     .padding(7)
             }
         }
+        .overlay(alignment: .topLeading) {
+            if let activity {
+                Circle()
+                    .fill(activity.tint)
+                    .frame(width: 6, height: 6)
+                    .padding(9)
+            }
+        }
         .contentShape(RoundedRectangle(cornerRadius: Self.radius, style: .continuous))
     }
 
     /// A few sections keep a colour of their own, as their apps do.
     private var tint: Color {
         switch tab {
-        case .media: return Color(red: 1.0, green: 0.30, blue: 0.45)
+        case .media: return TabActivity.playing
         case .calendar: return Color(red: 1.0, green: 0.27, blue: 0.23)
         case .focus: return LiveActivityWings.tint(for: .work)
         default: return Color.white.opacity(0.85)
